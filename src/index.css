@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-charcoal-900 text-cream-50 font-sans;
+    overscroll-behavior-y: none;
+  }
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Custom scrollbar for desktop */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1c1812;
+}
+::-webkit-scrollbar-thumb {
+  background: #5a4f40;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7a6f5d;
+}
+
+/* Smooth scroll for anchor links */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Image loading shimmer */
+.img-shimmer {
+  background: linear-gradient(90deg, #2a2419 25%, #3f362a 50%, #2a2419 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Branding sign styling */
+.brand-sign {
+  filter: drop-shadow(0 10px 30px rgba(0,0,0,0.45)) drop-shadow(0 2px 8px rgba(0,0,0,0.3));
+  border-radius: 9999px;
+}
+
+/* Hero warm vignette */
+.hero-warm::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 50% at 50% 40%, rgba(255,238,220,0.35), rgba(0,0,0,0.55));
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.hero-blur-overlay {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(4px) saturate(1.05);
+  opacity: 0.08;
+  pointer-events: none;
+}
