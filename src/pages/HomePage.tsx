@@ -219,7 +219,7 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
                   </div>
                   <div>
                     <h3 className="text-cream-50 font-medium text-sm">Location</h3>
-                    <p className="text-charcoal-300 text-sm">Kollad Market, Main Road<br />Near Bus Stand, Kollad</p>
+                    <p className="text-charcoal-300 text-sm">Paraw, area main bazar kandaghat.<br />Kandaghat, Himachal Pradesh, India</p>
                   </div>
                 </div>
 
@@ -229,8 +229,8 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
                   </div>
                   <div>
                     <h3 className="text-cream-50 font-medium text-sm">Contact</h3>
-                    <a href="tel:+919876543210" className="text-charcoal-300 text-sm hover:text-cream-300 transition-colors">
-                      +91 98765 43210
+                    <a href="tel:+918544723922" className="text-charcoal-300 text-sm hover:text-cream-300 transition-colors">
+                      +91 85447 23922
                     </a>
                   </div>
                 </div>
@@ -241,7 +241,7 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
                   </div>
                   <div>
                     <h3 className="text-cream-50 font-medium text-sm">Opening Hours</h3>
-                    <p className="text-charcoal-300 text-sm">Mon - Sun: 10:00 AM - 11:00 PM</p>
+                    <p className="text-charcoal-300 text-sm">Monday - Sunday: 10 AM - 11 PM</p>
                   </div>
                 </div>
 
@@ -251,7 +251,7 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
                   </div>
                   <div>
                     <h3 className="text-cream-50 font-medium text-sm">Order Options</h3>
-                    <p className="text-charcoal-300 text-sm">Dine In & Takeaway available</p>
+                    <p className="text-charcoal-300 text-sm">Dine In, Takeaway & Online Delivery</p>
                   </div>
                 </div>
               </div>

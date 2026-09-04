@@ -19,25 +19,25 @@ export default function ContactPage() {
         {/* Contact cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <a
-            href="tel:+919876543210"
+            href="tel:+918544723922"
             className="bg-charcoal-800 rounded-2xl p-5 border border-charcoal-700/30 hover:border-cream-400/30 transition-all duration-200 group"
           >
             <div className="w-11 h-11 rounded-xl bg-cream-400/10 flex items-center justify-center mb-3 group-hover:bg-cream-400/20 transition-colors">
               <Phone size={22} className="text-cream-400" />
             </div>
             <h3 className="font-heading font-semibold text-cream-50 text-base mb-1">Call Us</h3>
-            <p className="text-charcoal-300 text-sm">+91 98765 43210</p>
+            <p className="text-charcoal-300 text-sm">+91 85447 23922</p>
           </a>
 
           <a
-            href="mailto:hello@bhukkadcafe.com"
+            href="mailto:m8426514@gmail.com"
             className="bg-charcoal-800 rounded-2xl p-5 border border-charcoal-700/30 hover:border-cream-400/30 transition-all duration-200 group"
           >
             <div className="w-11 h-11 rounded-xl bg-cream-400/10 flex items-center justify-center mb-3 group-hover:bg-cream-400/20 transition-colors">
               <Mail size={22} className="text-cream-400" />
             </div>
             <h3 className="font-heading font-semibold text-cream-50 text-base mb-1">Email Us</h3>
-            <p className="text-charcoal-300 text-sm">hello@bhukkadcafe.com</p>
+            <p className="text-charcoal-300 text-sm">m8426514@gmail.com</p>
           </a>
         </div>
 
@@ -50,9 +50,8 @@ export default function ContactPage() {
             <div>
               <h3 className="font-heading font-semibold text-cream-50 text-base mb-1">Visit Our Cafe</h3>
               <p className="text-charcoal-300 text-sm leading-relaxed">
-                Kollad Market, Main Road<br />
-                Near Bus Stand, Kollad<br />
-                Rajasthan, India
+                Paraw, area main bazar kandaghat.<br />
+                Kandaghat, Himachal Pradesh, India
               </p>
             </div>
           </div>
@@ -63,15 +62,8 @@ export default function ContactPage() {
             </div>
             <div className="flex-1">
               <h3 className="font-heading font-semibold text-cream-50 text-base mb-1">Opening Hours</h3>
-              <div className="text-charcoal-300 text-sm space-y-0.5">
-                <div className="flex justify-between max-w-xs">
-                  <span>Monday - Friday</span>
-                  <span className="text-cream-200">10 AM - 11 PM</span>
-                </div>
-                <div className="flex justify-between max-w-xs">
-                  <span>Saturday - Sunday</span>
-                  <span className="text-cream-200">10 AM - 11 PM</span>
-                </div>
+              <div className="text-charcoal-300 text-sm">
+                Monday - Sunday: 10 AM - 11 PM
               </div>
             </div>
           </div>
@@ -83,8 +75,7 @@ export default function ContactPage() {
             <div>
               <h3 className="font-heading font-semibold text-cream-50 text-base mb-1">Order Options</h3>
               <p className="text-charcoal-300 text-sm">
-                Dine In & Takeaway available<br />
-                <span className="text-cream-200">Order online through our app</span>
+                Dine In, Takeaway & Online Delivery
               </p>
             </div>
           </div>
@@ -103,10 +94,10 @@ export default function ContactPage() {
           <div className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-2 text-charcoal-300 text-sm">
               <MapPin size={16} className="text-cream-400" />
-              Kollad Market, Main Road
+              Paraw, area main bazar kandaghat. Kandaghat, Himachal Pradesh
             </div>
             <a
-              href="https://www.google.com/maps/search/?api=1&query=Kollad+Market"
+              href="https://www.google.com/maps/search/?api=1&query=Paraw+area+main+bazar+kandaghat+Kandaghat+Himachal+Pradesh"
               target="_blank"
               rel="noopener noreferrer"
               className="text-cream-400 text-sm font-medium hover:text-cream-300 transition-colors"
@@ -135,7 +126,7 @@ export default function ContactPage() {
               <Facebook size={20} />
             </a>
             <a
-              href="https://wa.me/919876543210"
+              href="https://wa.me/918544723922"
               className="w-11 h-11 rounded-full bg-charcoal-700 flex items-center justify-center text-charcoal-300 hover:bg-cream-400 hover:text-charcoal-900 transition-all duration-200"
               aria-label="WhatsApp"
             >
