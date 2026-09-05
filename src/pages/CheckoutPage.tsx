@@ -56,43 +56,40 @@ export default function CheckoutPage({ onNavigate, onOrderPlaced }: CheckoutPage
     setSubmitting(true);
 
     try {
-      const { data: orderNumberData } = await supabase.rpc('generate_order_number');
-      const orderNumber = orderNumberData as string;
+      // Build payload for server-side order creation. Do NOT include client-side prices.
+      const payload = {
+        customer_name: customerName.trim(),
+        mobile_number: mobileNumber.replace(/\s/g, ''),
+        order_type: orderType,
+        table_number: orderType === 'dine_in' ? tableNumber.trim() : null,
+        special_instructions: specialInstructions.trim() || null,
+        items: items.map((ci) => ({
+          menu_item_id: ci.menuItem.id,
+          quantity: ci.quantity,
+        })),
+      } as any;
 
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          order_number: orderNumber,
-          customer_name: customerName.trim(),
-          mobile_number: mobileNumber.replace(/\s/g, ''),
-          order_type: orderType,
-          table_number: orderType === 'dine_in' ? tableNumber.trim() : null,
-          special_instructions: specialInstructions.trim() || null,
-          status: 'pending',
-          subtotal,
-          total: subtotal,
-          estimated_minutes: 20,
-        })
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc('create_order_secure', { p_payload: payload });
+      if (error) throw error;
 
-      if (orderError || !orderData) {
-        throw new Error(orderError?.message ?? 'Failed to place order');
+      // RPC returns a row with order_id and view_token
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row || !row.order_id || !row.view_token) {
+        throw new Error('create_order_secure returned unexpected response');
       }
 
-      const orderItems = items.map((ci) => ({
-        order_id: orderData.id,
-        menu_item_id: ci.menuItem.id,
-        item_name: ci.menuItem.name,
-        price: ci.menuItem.price,
-        quantity: ci.quantity,
-      }));
+      // Store view_token in session only for this browser session so tracking/confirmation can use it.
+      try {
+        sessionStorage.setItem('last_view_token', String(row.view_token));
+      } catch (e) {
+        // ignore sessionStorage errors
+      }
 
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-      if (itemsError) throw itemsError;
-
+      // Clear cart and navigate/notify parent. We pass a minimal order object with id so
+      // confirmation/tracking view will load the full order via get_order_by_token.
+      const placeholderOrder: Partial<Order> = { id: row.order_id };
       clearCart();
-      onOrderPlaced(orderData as Order);
+      onOrderPlaced(placeholderOrder as Order);
     } catch (err) {
       setErrors({
         submit: err instanceof Error ? err.message : 'Failed to place order. Please try again.',

@@ -83,3 +83,34 @@ export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   dine_in: 'Dine In',
   takeaway: 'Takeaway',
 };
+
+// RPC responses
+export interface CreateOrderResponse {
+  order_id: string;
+  view_token: string;
+}
+
+export interface GetOrderByTokenResponse {
+  order: {
+    id: string;
+    order_number: string;
+    customer_name: string;
+    mobile_number: string;
+    order_type: OrderType;
+    table_number: string | null;
+    special_instructions: string | null;
+    subtotal: number;
+    total: number;
+    status: OrderStatus;
+    estimated_minutes: number;
+    created_at: string;
+    updated_at: string;
+  };
+  items: Array<{
+    menu_item_id: string;
+    item_name: string;
+    quantity: number;
+    unit_price: number;
+    line_total: number;
+  }>;
+}

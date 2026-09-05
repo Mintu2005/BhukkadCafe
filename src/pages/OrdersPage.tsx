@@ -32,14 +32,53 @@ export default function OrdersPage({ onNavigate, onTrackOrder, trackOrder }: Ord
 
   const fetchOrders = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, order_items(*)')
-      .order('created_at', { ascending: false })
-      .limit(50);
+    try {
+      // Do not perform broad anonymous SELECTs. Load only the last order for this session if available.
+      const viewToken = sessionStorage.getItem('last_view_token');
+      if (!viewToken) {
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
 
-    if (!error && data) {
-      setOrders(data as Order[]);
+      const { data, error } = await supabase.rpc('get_order_by_token', { p_view_token: viewToken });
+      if (!error && data) {
+        const resp = Array.isArray(data) ? data[0] : data;
+        if (resp && resp.order) {
+          const o = resp.order;
+          const items = resp.items || [];
+          const mappedOrder: Order = {
+            id: o.id,
+            order_number: o.order_number,
+            customer_name: o.customer_name,
+            mobile_number: o.mobile_number,
+            order_type: o.order_type,
+            table_number: o.table_number,
+            special_instructions: o.special_instructions,
+            status: o.status,
+            subtotal: o.subtotal,
+            total: o.total,
+            estimated_minutes: o.estimated_minutes,
+            created_at: o.created_at,
+            updated_at: o.updated_at,
+            order_items: items.map((it: any, idx: number) => ({
+              id: `${it.menu_item_id}-${idx}`,
+              order_id: o.id,
+              menu_item_id: it.menu_item_id,
+              item_name: it.item_name,
+              price: it.unit_price,
+              quantity: it.quantity,
+            })),
+          };
+          setOrders([mappedOrder]);
+        } else {
+          setOrders([]);
+        }
+      } else {
+        setOrders([]);
+      }
+    } catch (e) {
+      setOrders([]);
     }
     setLoading(false);
   };
@@ -171,14 +210,45 @@ function TrackOrderView({ order, onBack }: { order: Order; onBack: () => void })
   useEffect(() => {
     setCurrentOrder(order);
     const poll = async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*, order_items(*)')
-        .eq('id', order.id)
-        .maybeSingle();
-      if (!error && data) setCurrentOrder(data as Order);
+      try {
+        const viewToken = (order as any).view_token || sessionStorage.getItem('last_view_token');
+        if (!viewToken) return;
+        const { data, error } = await supabase.rpc('get_order_by_token', { p_view_token: viewToken });
+        if (error) return;
+        const resp = Array.isArray(data) ? data[0] : data;
+        if (!resp) return;
+        const o = resp.order;
+        const items = resp.items || [];
+        const mappedOrder: Order = {
+          id: o.id,
+          order_number: o.order_number,
+          customer_name: o.customer_name,
+          mobile_number: o.mobile_number,
+          order_type: o.order_type,
+          table_number: o.table_number,
+          special_instructions: o.special_instructions,
+          status: o.status,
+          subtotal: o.subtotal,
+          total: o.total,
+          estimated_minutes: o.estimated_minutes,
+          created_at: o.created_at,
+          updated_at: o.updated_at,
+          order_items: items.map((it: any, idx: number) => ({
+            id: `${it.menu_item_id}-${idx}`,
+            order_id: o.id,
+            menu_item_id: it.menu_item_id,
+            item_name: it.item_name,
+            price: it.unit_price,
+            quantity: it.quantity,
+          })),
+        };
+        setCurrentOrder(mappedOrder);
+      } catch (e) {
+        // ignore
+      }
     };
     const interval = setInterval(poll, 5000);
+    poll();
     return () => clearInterval(interval);
   }, [order]);
 
