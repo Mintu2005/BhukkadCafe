@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Order, OrderStatus, MenuItem, Category } from '@/lib/types';
+import type { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { ORDER_STATUS_LABELS } from '@/lib/types';
 import {
   LayoutDashboard,
@@ -46,10 +47,10 @@ export default function AdminDashboard() {
   const [loginLoading, setLoginLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setView('dashboard');
+    supabase.auth.getSession().then(({ data }: { data: { session: Session | null } | null }) => {
+      if (data?.session) setView('dashboard');
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setView(session ? 'dashboard' : 'login');
     });
     return () => sub.subscription.unsubscribe();
@@ -225,12 +226,13 @@ function OverviewTab() {
           .limit(5),
       ]);
 
-      const todayRevenue = (ordersRes.data ?? [])
+      const ordersData = (ordersRes.data ?? []) as Array<{ total: string | number; created_at: string }>;
+      const todayRevenue = ordersData
         .filter((o) => new Date(o.created_at) >= today)
-        .reduce((sum, o) => sum + Number(o.total), 0);
+        .reduce((sum: number, o) => sum + Number(o.total), 0);
 
       setStats({
-        totalOrders: ordersRes.data?.length ?? 0,
+        totalOrders: ordersData.length ?? 0,
         pendingOrders: pendingRes.data?.length ?? 0,
         todayRevenue,
         totalItems: itemsRes.count ?? 0,

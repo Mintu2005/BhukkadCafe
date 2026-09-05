@@ -14,7 +14,7 @@ function makeMissingEnvProxy(): any {
   // environment variables to enable full behavior.
   console.error(message);
 
-  const noopResponse = (result = null) => ({ data: result, error: null });
+  const noopResponse = <T = unknown>(result: T | null = null) => ({ data: result as T | null, error: null as Error | null });
 
   const makeChainable = (result: any) => {
     const obj: any = {
@@ -24,12 +24,12 @@ function makeMissingEnvProxy(): any {
     };
     const chainMethods = ['select', 'insert', 'update', 'delete', 'eq', 'neq', 'in', 'order', 'limit', 'range', 'single'];
     chainMethods.forEach((m) => {
-      obj[m] = (..._args: any[]) => obj;
+      obj[m] = (..._args: unknown[]) => obj;
     });
     return obj;
   };
 
-  const tableHandler = () => makeChainable(noopResponse([]));
+  const tableHandler = () => makeChainable(noopResponse<unknown[]>([]));
 
   const auth = {
     getSession: () => Promise.resolve({ data: { session: null }, error: null }),

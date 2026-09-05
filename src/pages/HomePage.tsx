@@ -14,6 +14,7 @@ interface HomePageProps {
 export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
   const [popularItems, setPopularItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryImages, setCategoryImages] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,12 +32,62 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
           .select('*')
           .order('display_order'),
       ]);
-      setPopularItems(popularRes.data ?? []);
+      let popular = (popularRes.data ?? []) as MenuItem[];
+      // if no explicit popular items, fallback to available items so the section isn't empty
+      if (!popular || popular.length === 0) {
+        try {
+          const fallback = await supabase
+            .from('menu_items')
+            .select('*, category:categories(*)')
+            .eq('is_available', true)
+            .order('display_order')
+            .limit(6);
+          popular = (fallback.data ?? []) as MenuItem[];
+        } catch {
+          popular = [];
+        }
+      }
+      setPopularItems(popular);
       setCategories(catRes.data ?? []);
       setLoading(false);
     };
     fetchData();
   }, []);
+
+  // Fetch one image per category from menu_items as a graceful fallback
+  useEffect(() => {
+    if (categories.length === 0) return;
+    const fetchCatImages = async () => {
+      try {
+        const imgMap: Record<string, string> = {};
+        await Promise.all(
+          categories.map(async (cat) => {
+            try {
+              const res = await supabase
+                .from('menu_items')
+                .select('image_url')
+                .eq('category_id', cat.id)
+                .eq('is_available', true)
+                .not('image_url', 'is', null)
+                .order('display_order')
+                .limit(1);
+              const rows = res.data as Array<{ image_url?: string }> | null;
+              const url = rows && rows[0]?.image_url ? String(rows[0].image_url).trim() : '';
+              if (url && (url.startsWith('http') || url.startsWith('/'))) {
+                imgMap[String(cat.id)] = url;
+              }
+            } catch {
+              // ignore per-category errors
+            }
+          })
+        );
+        setCategoryImages(imgMap);
+      } catch {
+        // ignore
+      }
+    };
+    fetchCatImages();
+  }, [categories.length]);
 
   return (
     <div className="animate-fade-in">
@@ -70,9 +121,16 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
             {/* Right: text */}
             <div className="text-center md:text-left w-full md:w-1/2">
               <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl text-cream-50 font-bold mb-4">Good Food. Good Mood.</h1>
-              <p className="text-cream-200/80 text-sm sm:text-base max-w-lg mb-6">
+              <p className="text-cream-200/80 text-sm sm:text-base max-w-lg mb-3">
                 Where every craving meets its match. Fresh, bold, and full of flavour — made just for you at Bhukkad Cafe.
               </p>
+              <div className="inline-flex items-center gap-2 bg-charcoal-900/60 px-3 py-1 rounded-full mb-4">
+                <span className="text-cream-300 text-xs">Fresh</span>
+                <span className="text-charcoal-600">•</span>
+                <span className="text-cream-300 text-xs">Fast</span>
+                <span className="text-charcoal-600">•</span>
+                <span className="text-cream-300 text-xs">Delicious</span>
+              </div>
               <div className="flex items-center justify-center md:justify-start gap-3">
                 <button
                   onClick={() => onNavigate('menu')}
@@ -80,6 +138,12 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
                 >
                   Order Now
                   <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" strokeWidth={2.5} />
+                </button>
+                <button
+                  onClick={() => onNavigate('menu')}
+                  className="inline-flex items-center gap-2 border border-charcoal-700 text-cream-200 px-5 py-3 rounded-full hover:bg-charcoal-800/60 transition-colors"
+                >
+                  Explore Menu
                 </button>
               </div>
             </div>
@@ -125,22 +189,25 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
             <ArrowRight size={16} />
           </button>
         </div>
-
         <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex-shrink-0 w-20 h-24 bg-charcoal-800 rounded-2xl img-shimmer" />
+                <div key={i} className="flex-shrink-0 w-20 h-28 bg-charcoal-800 rounded-2xl img-shimmer" />
               ))
             : categories.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => onNavigate('menu', { category: cat.slug })}
-                  className="flex-shrink-0 w-20 sm:w-24 flex flex-col items-center gap-2 group"
+                  className="flex-shrink-0 w-32 sm:w-36 flex flex-col items-center gap-2 group"
                 >
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-charcoal-800 border border-charcoal-700/50 flex items-center justify-center text-3xl group-hover:bg-charcoal-700 group-hover:border-cream-400/30 group-hover:scale-105 transition-all duration-300 shadow-lg">
-                    {cat.icon}
+                  <div className="w-28 h-20 sm:w-32 sm:h-24 rounded-2xl bg-charcoal-800 border border-charcoal-700/50 overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-300 shadow-lg">
+                    {categoryImages[cat.id] ? (
+                      <img src={categoryImages[cat.id]} alt={cat.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-3xl">{cat.icon}</div>
+                    )}
                   </div>
-                  <span className="text-charcoal-200 text-[11px] sm:text-xs font-medium text-center leading-tight group-hover:text-cream-300 transition-colors">
+                  <span className="text-charcoal-200 text-sm font-medium text-center leading-tight group-hover:text-cream-300 transition-colors">
                     {cat.name}
                   </span>
                 </button>
@@ -164,20 +231,35 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-          {loading
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="bg-charcoal-800 rounded-2xl overflow-hidden">
-                  <div className="aspect-square img-shimmer" />
-                  <div className="p-4 space-y-2">
-                    <div className="h-4 bg-charcoal-700 rounded img-shimmer" />
-                    <div className="h-3 bg-charcoal-700 rounded w-2/3 img-shimmer" />
-                  </div>
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-charcoal-800 rounded-2xl overflow-hidden">
+                <div className="aspect-square img-shimmer" />
+                <div className="p-4 space-y-2">
+                  <div className="h-4 bg-charcoal-700 rounded img-shimmer" />
+                  <div className="h-3 bg-charcoal-700 rounded w-2/3 img-shimmer" />
                 </div>
-              ))
-            : popularItems.map((item) => (
-                <FoodCard key={item.id} item={item} onClick={() => onItemSelect(item)} />
-              ))}
+              </div>
+            ))
+          ) : popularItems && popularItems.length > 0 ? (
+            popularItems.slice(0, 4).map((item) => (
+              <FoodCard key={item.id} item={item} onClick={() => onItemSelect(item)} />
+            ))
+          ) : (
+            <div className="col-span-2 sm:col-span-2 lg:col-span-4 bg-charcoal-800 rounded-2xl p-6 border border-charcoal-700/30 text-center">
+              <p className="text-charcoal-400">No popular items available right now. Check the full menu.</p>
+              <div className="mt-3">
+                <button
+                  onClick={() => onNavigate('menu')}
+                  className="inline-flex items-center gap-2 bg-cream-400 hover:bg-cream-300 text-charcoal-900 font-heading font-bold text-sm px-4 py-2 rounded-full"
+                >
+                  See Menu
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
