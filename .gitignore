@@ -21,3 +21,8 @@ dist-ssr
 *.sln
 *.sw?
 .env
+# ignore common env variants
+.env.local
+.env.production
+# ignore any other env files that shouldn't be committed
+.env.*

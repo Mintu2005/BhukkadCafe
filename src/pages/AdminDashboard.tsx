@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Order, OrderStatus, MenuItem, Category } from '@/lib/types';
+import type { Order, OrderStatus, MenuItem, Category, OrderItem } from '@/lib/types';
 import type { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { ORDER_STATUS_LABELS } from '@/lib/types';
 import {
@@ -22,9 +22,10 @@ import {
   AlertCircle,
   Search,
   Eye,
+  BarChart as BarChartIcon,
 } from 'lucide-react';
 
-type AdminTab = 'overview' | 'orders' | 'menu';
+type AdminTab = 'overview' | 'orders' | 'menu' | 'categories' | 'analytics';
 type AdminView = 'login' | 'dashboard';
 
 const STATUS_FLOW: OrderStatus[] = ['pending', 'accepted', 'preparing', 'ready', 'completed'];
@@ -45,6 +46,13 @@ export default function AdminDashboard() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string }>>([]);
+
+  const addToast = (message: string) => {
+    const id = String(Date.now()) + Math.random().toString(36).slice(2, 7);
+    setToasts((t) => [...t, { id, message }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }: { data: { session: Session | null } | null }) => {
@@ -170,6 +178,8 @@ export default function AdminDashboard() {
             { id: 'overview' as AdminTab, label: 'Overview', icon: TrendingUp },
             { id: 'orders' as AdminTab, label: 'Orders', icon: ShoppingBag },
             { id: 'menu' as AdminTab, label: 'Menu', icon: UtensilsCrossed },
+            { id: 'categories' as AdminTab, label: 'Categories', icon: Package },
+            { id: 'analytics' as AdminTab, label: 'Analytics', icon: BarChartIcon },
           ].map((t) => {
             const Icon = t.icon;
             return (
@@ -191,16 +201,341 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        {tab === 'overview' && <OverviewTab />}
-        {tab === 'orders' && <OrdersTab />}
-        {tab === 'menu' && <MenuTab />}
+        {tab === 'overview' && <OverviewTab addToast={addToast} />}
+        {tab === 'orders' && <OrdersTab addToast={addToast} />}
+        {tab === 'menu' && <MenuTab addToast={addToast} />}
+        {tab === 'categories' && <CategoryTab addToast={addToast} />}
+        {tab === 'analytics' && <AnalyticsTab />}
+      </div>
+    </div>
+  );
+}
+
+// =============== ANALYTICS ===============
+import { LineChart, Line, BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
+
+function AnalyticsTab() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [orderItems, setOrderItems] = useState<Array<OrderItem & { menu_item?: MenuItem | null }>>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [range, setRange] = useState<'today' | '7' | '30' | 'month' | 'custom'>('7');
+  const [customFrom, setCustomFrom] = useState<string>('');
+  const [customTo, setCustomTo] = useState<string>('');
+
+  const getRangeDates = useCallback((): { from: Date; to: Date } => {
+    const now = new Date();
+    let from = new Date();
+    let to = new Date();
+    if (range === 'today') {
+      from.setHours(0, 0, 0, 0);
+      to.setHours(23, 59, 59, 999);
+    } else if (range === '7') {
+      from = new Date(now);
+      from.setDate(now.getDate() - 6);
+      from.setHours(0, 0, 0, 0);
+      to.setHours(23, 59, 59, 999);
+    } else if (range === '30') {
+      from = new Date(now);
+      from.setDate(now.getDate() - 29);
+      from.setHours(0, 0, 0, 0);
+      to.setHours(23, 59, 59, 999);
+    } else if (range === 'month') {
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (range === 'custom' && customFrom && customTo) {
+      from = new Date(customFrom);
+      from.setHours(0, 0, 0, 0);
+      to = new Date(customTo);
+      to.setHours(23, 59, 59, 999);
+    }
+    return { from, to };
+  }, [range, customFrom, customTo]);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // determine date range
+      const now = new Date();
+      let from = new Date();
+      let to = new Date();
+      if (range === 'today') {
+        from.setHours(0, 0, 0, 0);
+        to.setHours(23, 59, 59, 999);
+      } else if (range === '7') {
+        from.setDate(now.getDate() - 6);
+        from.setHours(0, 0, 0, 0);
+        to.setHours(23, 59, 59, 999);
+      } else if (range === '30') {
+        from.setDate(now.getDate() - 29);
+        from.setHours(0, 0, 0, 0);
+        to.setHours(23, 59, 59, 999);
+      } else if (range === 'month') {
+        from = new Date(now.getFullYear(), now.getMonth(), 1);
+        to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      } else if (range === 'custom' && customFrom && customTo) {
+        from = new Date(customFrom);
+        to = new Date(customTo);
+        to.setHours(23, 59, 59, 999);
+      }
+
+      // fetch all orders within range (we'll compute completed/rejected counts locally)
+      const { data: ordersRes, error: ordersErr } = await supabase
+        .from('orders')
+        .select('*')
+        .gte('created_at', from.toISOString())
+        .lte('created_at', to.toISOString())
+        .order('created_at', { ascending: true });
+      if (ordersErr) throw ordersErr;
+      const ordersData = (ordersRes ?? []) as Order[];
+      setOrders(ordersData);
+
+      // fetch order_items for completed orders only (used for top items and category performance)
+      const completedIds = ordersData.filter((o) => o.status === 'completed').map((o) => o.id);
+      let itemsData: Array<OrderItem & { menu_item?: MenuItem | null }> = [];
+      if (completedIds.length > 0) {
+        const { data: itemsRes, error: itemsErr } = await supabase
+          .from('order_items')
+          .select('*, menu_item:menu_items(id,name,category_id,price)')
+          .in('order_id', completedIds);
+        if (itemsErr) throw itemsErr;
+        itemsData = (itemsRes ?? []) as Array<OrderItem & { menu_item?: MenuItem | null }>;
+      }
+      setOrderItems(itemsData);
+
+      const { data: cats, error: catErr } = await supabase.from('categories').select('*');
+      if (catErr) throw catErr;
+      setCategories(cats ?? []);
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err);
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [range, customFrom, customTo]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // compute metrics
+  const totalOrders = orders.length;
+  const completedOrders = orders.filter((o) => o.status === 'completed').length;
+  const rejectedOrders = orders.filter((o) => o.status === 'rejected').length;
+  const totalRevenue = orders.filter((o) => o.status === 'completed').reduce((s, o) => s + Number(o.total || 0), 0);
+  const avgOrderValue = completedOrders ? totalRevenue / completedOrders : 0;
+  const completionRate = totalOrders ? (completedOrders / totalOrders) * 100 : 0;
+  const rejectionRate = totalOrders ? (rejectedOrders / totalOrders) * 100 : 0;
+
+  // top items
+  const itemMap = new Map<string, { name: string; qty: number; revenue: number }>();
+  orderItems.forEach((it) => {
+    const key = it.menu_item?.id ?? it.menu_item_id ?? it.item_name;
+    const name = it.menu_item?.name ?? it.item_name;
+    const qty = Number(it.quantity ?? 0);
+    const unitPrice = Number(it.menu_item?.price ?? it.price ?? 0);
+    const revenue = unitPrice * qty;
+    const existing = itemMap.get(key) ?? { name, qty: 0, revenue: 0 };
+    existing.qty += qty;
+    existing.revenue += revenue;
+    itemMap.set(String(key), existing);
+  });
+  const topItems = Array.from(itemMap.values()).sort((a, b) => b.qty - a.qty).slice(0, 10);
+
+  // category performance
+  const catMap = new Map<string, { name: string; qty: number; revenue: number }>();
+  orderItems.forEach((it) => {
+    const catId = it.menu_item?.category_id ?? 'uncategorized';
+    const qty = Number(it.quantity ?? 0);
+    const unitPrice = Number(it.menu_item?.price ?? it.price ?? 0);
+    const revenue = unitPrice * qty;
+    const key = String(catId);
+    const catName = catId !== 'uncategorized' ? (categories.find((c) => c.id === catId)?.name ?? 'Unknown') : 'Uncategorized';
+    const existing = catMap.get(key) ?? { name: catName, qty: 0, revenue: 0 };
+    existing.qty += qty;
+    existing.revenue += revenue;
+    catMap.set(key, existing);
+  });
+  const categoryPerformance = Array.from(catMap.values()).sort((a, b) => b.revenue - a.revenue);
+
+  // revenue and orders over time (daily buckets between from/to)
+  const { from: bucketFrom, to: bucketTo } = getRangeDates();
+  const msPerDay = 24 * 3600 * 1000;
+  const daysCount = Math.max(1, Math.ceil((bucketTo.setHours(0, 0, 0, 0) - bucketFrom.setHours(0, 0, 0, 0)) / msPerDay) + 1);
+  const dayBuckets = new Map<string, { date: string; revenue: number; orders: number }>();
+  for (let i = 0; i < daysCount; i++) {
+    const d = new Date(bucketFrom.getTime() + i * msPerDay);
+    const label = d.toLocaleDateString();
+    dayBuckets.set(label, { date: label, revenue: 0, orders: 0 });
+  }
+  // ordersOverTime: count all orders per day
+  orders.forEach((o) => {
+    const label = new Date(o.created_at).toLocaleDateString();
+    const b = dayBuckets.get(label) ?? { date: label, revenue: 0, orders: 0 };
+    b.orders += 1;
+    dayBuckets.set(label, b);
+  });
+  // revenue over time: use completed orders totals
+  orders.filter((o) => o.status === 'completed').forEach((o) => {
+    const label = new Date(o.created_at).toLocaleDateString();
+    const b = dayBuckets.get(label) ?? { date: label, revenue: 0, orders: 0 };
+    b.revenue += Number(o.total || 0);
+    dayBuckets.set(label, b);
+  });
+  const revenueOverTime = Array.from(dayBuckets.values());
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={28} className="animate-spin text-charcoal-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-20 text-rust-300">Error loading analytics: {error}</div>
+    );
+  }
+
+  return (
+    <div className="animate-fade-in space-y-4">
+      <div className="flex flex-col lg:flex-row gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1">
+          <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+            <p className="text-charcoal-400 text-xs">Revenue (completed)</p>
+            <p className="font-heading font-bold text-2xl text-cream-50">₹{totalRevenue.toFixed(2)}</p>
+            <p className="text-charcoal-400 text-xs">Range: {range === 'custom' ? `${customFrom} → ${customTo}` : range}</p>
+          </div>
+          <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+            <p className="text-charcoal-400 text-xs">Total Orders</p>
+            <p className="font-heading font-bold text-2xl text-cream-50">{totalOrders}</p>
+            <p className="text-charcoal-400 text-xs">All statuses</p>
+          </div>
+          <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+            <p className="text-charcoal-400 text-xs">Completed</p>
+            <p className="font-heading font-bold text-2xl text-cream-50">{completedOrders}</p>
+            <p className="text-charcoal-400 text-xs">Rate: {completionRate.toFixed(1)}%</p>
+          </div>
+          <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+            <p className="text-charcoal-400 text-xs">Rejected</p>
+            <p className="font-heading font-bold text-2xl text-cream-50">{rejectedOrders}</p>
+            <p className="text-charcoal-400 text-xs">Rate: {rejectionRate.toFixed(1)}%</p>
+          </div>
+        </div>
+
+        <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30 lg:w-1/3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-heading font-semibold text-cream-50">Top Items</h3>
+            <div className="text-charcoal-400 text-xs">Top {topItems.length}</div>
+          </div>
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <div className="bg-charcoal-900 rounded-xl p-2 text-center">
+              <div className="text-charcoal-400 text-xs">Avg Order Value</div>
+              <div className="font-heading font-bold text-cream-50">₹{avgOrderValue.toFixed(2)}</div>
+            </div>
+            <div className="bg-charcoal-900 rounded-xl p-2 text-center">
+              <div className="text-charcoal-400 text-xs">Top Category</div>
+              <div className="font-heading font-bold text-cream-50">{categoryPerformance[0]?.name ?? '—'}</div>
+            </div>
+          </div>
+          {topItems.length === 0 ? (
+            <div className="text-charcoal-400 text-sm py-6 text-center">No items sold in range</div>
+          ) : (
+            <div className="space-y-2">
+              {topItems.map((t, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <div>
+                    <div className="text-cream-50 text-sm font-medium">{t.name}</div>
+                    <div className="text-charcoal-400 text-xs">{t.qty} sold</div>
+                  </div>
+                  <div className="text-cream-400 font-bold">₹{t.revenue.toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-3">
+        <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+          <h4 className="font-heading font-semibold text-cream-50 mb-2">Revenue Over Time</h4>
+          <div style={{ width: '100%', height: 240 }}>
+            <ResponsiveContainer>
+              <LineChart data={revenueOverTime}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2b2b2b" />
+                <XAxis dataKey="date" tick={{ fill: '#cbd5e1' }} />
+                <YAxis tick={{ fill: '#cbd5e1' }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="revenue" stroke="#FBBF24" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+          <h4 className="font-heading font-semibold text-cream-50 mb-2">Orders Over Time</h4>
+          <div style={{ width: '100%', height: 240 }}>
+            <ResponsiveContainer>
+              <ReBarChart data={revenueOverTime}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2b2b2b" />
+                <XAxis dataKey="date" tick={{ fill: '#cbd5e1' }} />
+                <YAxis tick={{ fill: '#cbd5e1' }} />
+                <Tooltip />
+                <Bar dataKey="orders" fill="#34D399" />
+              </ReBarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-3">
+        <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+          <h4 className="font-heading font-semibold text-cream-50 mb-2">Category Performance</h4>
+          {categoryPerformance.length === 0 ? (
+            <div className="text-charcoal-400 text-sm py-6 text-center">No category data</div>
+          ) : (
+            <div style={{ width: '100%', height: 300 }}>
+              <ResponsiveContainer>
+                <ReBarChart data={categoryPerformance} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2b2b2b" />
+                  <XAxis type="number" tick={{ fill: '#cbd5e1' }} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: '#cbd5e1' }} />
+                  <Tooltip />
+                  <Bar dataKey="revenue" fill="#60A5FA" />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+          <h4 className="font-heading font-semibold text-cream-50 mb-2">Top Items (Revenue)</h4>
+          {topItems.length === 0 ? (
+            <div className="text-charcoal-400 text-sm py-6 text-center">No sales</div>
+          ) : (
+            <div style={{ width: '100%', height: 300 }}>
+              <ResponsiveContainer>
+                <ReBarChart data={topItems} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2b2b2b" />
+                  <XAxis type="number" tick={{ fill: '#cbd5e1' }} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: '#cbd5e1' }} />
+                  <Tooltip />
+                  <Bar dataKey="revenue" fill="#F472B6" />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 // =============== OVERVIEW ===============
-function OverviewTab() {
+function OverviewTab({ addToast }: { addToast?: (m: string) => void }) {
   const [stats, setStats] = useState({
     totalOrders: 0,
     pendingOrders: 0,
@@ -305,13 +640,19 @@ function OverviewTab() {
 }
 
 // =============== ORDERS ===============
-function OrdersTab() {
+function OrdersTab({ addToast }: { addToast: (m: string) => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState<string | null>(null);
+  const [dateTo, setDateTo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const fetchOrders = useCallback(async () => {
+    setError(null);
     let query = supabase
       .from('orders')
       .select('*, order_items(*)')
@@ -321,9 +662,10 @@ function OrdersTab() {
       query = query.eq('status', filter);
     }
     const { data, error } = await query;
-    if (!error && data) {
-      setOrders(data as Order[]);
+    if (error) {
+      setError(error.message || 'Failed to fetch orders');
     }
+    if (data) setOrders(data as Order[]);
     setLoading(false);
   }, [filter]);
 
@@ -331,16 +673,56 @@ function OrdersTab() {
     setLoading(true);
     fetchOrders();
     const interval = setInterval(fetchOrders, 10000);
-    return () => clearInterval(interval);
+    // subscribe to new orders via realtime
+    const channel = supabase.channel('orders_list_channel');
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload: any) => {
+      const newRow = payload.new as Order | undefined;
+      if (newRow) {
+        addToast(`New order ${newRow.order_number}`);
+        setOrders((prev) => (prev.find((o) => o.id === newRow.id) ? prev : [newRow as Order, ...prev]));
+      }
+    });
+    // listen for updates to keep status in sync
+    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload: any) => {
+      const newRow = payload.new as Partial<Order> | undefined;
+      if (newRow?.id) {
+        setOrders((prev) => prev.map((o) => (o.id === newRow.id ? { ...o, ...(newRow as Order) } : o)));
+      }
+    });
+    channel.subscribe();
+    return () => {
+      clearInterval(interval);
+      channel.unsubscribe();
+    };
   }, [fetchOrders]);
 
   const updateStatus = async (orderId: string, status: OrderStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status } : o))
-    );
-    await supabase.from('orders').update({ status }).eq('id', orderId);
-    if (selectedOrder?.id === orderId) {
-      setSelectedOrder((prev) => (prev ? { ...prev, status } : null));
+    // Prevent moving backward from final states
+    const current = orders.find((o) => o.id === orderId);
+    if (!current) return;
+    if (current.status === 'completed' || current.status === 'rejected') return;
+
+    // optimistic update
+    setUpdatingIds((m) => ({ ...m, [orderId]: true }));
+    const prev = orders;
+    setOrders((prevList) => prevList.map((o) => (o.id === orderId ? { ...o, status } : o)));
+    try {
+      const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+      if (error) throw error;
+      if (selectedOrder?.id === orderId) {
+        setSelectedOrder((prev) => (prev ? { ...prev, status } : null));
+      }
+      addToast(`Order ${orderId} moved to ${ORDER_STATUS_LABELS[status]}`);
+    } catch (err) {
+      // revert
+      setOrders(prev);
+      addToast(`Failed to update order ${orderId}`);
+    } finally {
+      setUpdatingIds((m) => {
+        const copy = { ...m };
+        delete copy[orderId];
+        return copy;
+      });
     }
   };
 
@@ -355,6 +737,21 @@ function OrdersTab() {
 
   return (
     <div className="animate-fade-in">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 -mx-4 px-4">
+        <div className="flex-1 min-w-0">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by order ID, customer, or phone..."
+            className="w-full bg-charcoal-800 text-cream-50 placeholder-charcoal-500 text-sm rounded-full px-4 py-2 border border-charcoal-700/50"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="date" className="bg-charcoal-800 text-cream-50 rounded px-2 py-2 border border-charcoal-700/50" onChange={(e) => setDateFrom(e.target.value || null)} />
+          <input type="date" className="bg-charcoal-800 text-cream-50 rounded px-2 py-2 border border-charcoal-700/50" onChange={(e) => setDateTo(e.target.value || null)} />
+        </div>
+      </div>
       {/* Filter tabs */}
       <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-4 -mx-4 px-4">
         {filterTabs.map((ft) => (
@@ -385,12 +782,38 @@ function OrdersTab() {
         </div>
       ) : (
         <div className="grid gap-3">
-          {orders.map((order) => (
+          {(
+            // client-side filtering & search
+            orders.filter((o) => {
+              const q = search.trim().toLowerCase();
+              if (q) {
+                return (
+                  o.order_number.toLowerCase().includes(q) ||
+                  o.customer_name.toLowerCase().includes(q) ||
+                  (o.mobile_number && o.mobile_number.includes(q))
+                );
+              }
+              if (filter !== 'all' && o.status !== filter) return false;
+              if (dateFrom) {
+                const from = new Date(dateFrom);
+                const created = new Date(o.created_at);
+                if (created < from) return false;
+              }
+              if (dateTo) {
+                const to = new Date(dateTo);
+                to.setHours(23, 59, 59, 999);
+                const created = new Date(o.created_at);
+                if (created > to) return false;
+              }
+              return true;
+            })
+          ).map((order) => (
             <OrderCard
               key={order.id}
               order={order}
               onStatusChange={updateStatus}
               onView={() => setSelectedOrder(order)}
+              disabled={!!updatingIds[order.id]}
             />
           ))}
         </div>
@@ -408,10 +831,12 @@ function OrderCard({
   order,
   onStatusChange,
   onView,
+  disabled = false,
 }: {
   order: Order;
   onStatusChange: (id: string, status: OrderStatus) => void;
   onView: () => void;
+  disabled?: boolean;
 }) {
   const itemCount = order.order_items?.reduce((sum, oi) => sum + oi.quantity, 0) ?? 0;
   const time = new Date(order.created_at).toLocaleTimeString('en-IN', {
@@ -467,35 +892,46 @@ function OrderCard({
       {/* Action buttons */}
       {order.status !== 'completed' && order.status !== 'rejected' && (
         <div className="flex gap-2 flex-wrap">
-          {order.status === 'pending' && (
-            <>
-              <button
-                onClick={() => onStatusChange(order.id, 'accepted')}
-                className="flex items-center gap-1.5 bg-cream-400 hover:bg-cream-300 text-charcoal-900 text-xs font-bold px-3 py-2 rounded-full transition-colors"
-              >
-                <Check size={14} strokeWidth={3} />
-                Accept
-              </button>
-              <button
-                onClick={() => onStatusChange(order.id, 'rejected')}
-                className="flex items-center gap-1.5 bg-rust-500/20 hover:bg-rust-500/30 text-rust-400 text-xs font-bold px-3 py-2 rounded-full transition-colors"
-              >
-                <X size={14} strokeWidth={3} />
-                Reject
-              </button>
-            </>
-          )}
-          {nextStatus && order.status !== 'pending' && (
-            <button
-              onClick={() => onStatusChange(order.id, nextStatus)}
-              className="flex items-center gap-1.5 bg-charcoal-700 hover:bg-charcoal-600 text-cream-50 text-xs font-bold px-3 py-2 rounded-full transition-colors"
-            >
-              {nextStatus === 'preparing' && <ChefHat size={14} />}
-              {nextStatus === 'ready' && <Bell size={14} />}
-              {nextStatus === 'completed' && <Package size={14} />}
-              Mark as {ORDER_STATUS_LABELS[nextStatus]}
-            </button>
-          )}
+          {(() => {
+            const actions: { label: string; status: OrderStatus; icon?: React.ReactNode } | null =
+              order.status === 'pending'
+                ? { label: 'Accept', status: 'accepted', icon: <Check size={14} strokeWidth={3} /> }
+                : order.status === 'accepted'
+                ? { label: 'Start Preparing', status: 'preparing', icon: <ChefHat size={14} /> }
+                : order.status === 'preparing'
+                ? { label: 'Mark Ready', status: 'ready', icon: <Bell size={14} /> }
+                : order.status === 'ready'
+                ? { label: 'Complete Order', status: 'completed', icon: <Package size={14} /> }
+                : null;
+
+            return (
+              <>
+                      {actions && (
+                        <button
+                          onClick={() => onStatusChange(order.id, actions.status)}
+                          disabled={disabled}
+                          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full transition-colors ${
+                            disabled ? 'opacity-60 cursor-not-allowed' : 'bg-cream-400 hover:bg-cream-300 text-charcoal-900'
+                          }`}
+                        >
+                          {actions.icon}
+                          {actions.label}
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => onStatusChange(order.id, 'rejected')}
+                        disabled={disabled}
+                        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full transition-colors ${
+                          disabled ? 'opacity-60 cursor-not-allowed' : 'bg-rust-500/20 hover:bg-rust-500/30 text-rust-400'
+                        }`}
+                      >
+                        <X size={14} strokeWidth={3} />
+                        Cancel
+                      </button>
+              </>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -518,7 +954,13 @@ function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => voi
       <div className="absolute inset-0 bg-charcoal-950/80 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div className="relative w-full sm:max-w-md max-h-[85vh] overflow-y-auto bg-charcoal-800 rounded-t-3xl sm:rounded-3xl animate-slide-up scrollbar-hide">
         <div className="sticky top-0 bg-charcoal-800 p-4 border-b border-charcoal-700/30 flex items-center justify-between">
-          <h2 className="font-heading font-bold text-lg text-cream-50">{order.order_number}</h2>
+          <div>
+            <h2 className="font-heading font-bold text-lg text-cream-50">{order.order_number}</h2>
+            <div className="text-charcoal-400 text-xs">{new Date(order.created_at).toLocaleString()}</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[order.status]}`}>{ORDER_STATUS_LABELS[order.status]}</span>
+          </div>
           <button onClick={onClose} className="text-charcoal-400 hover:text-cream-200">
             <X size={20} />
           </button>
@@ -547,29 +989,23 @@ function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => voi
             )}
           </div>
 
-          {order.special_instructions && (
-            <div className="bg-charcoal-900 rounded-xl p-3">
-              <p className="text-charcoal-400 text-xs mb-1">Special Instructions</p>
-              <p className="text-cream-200 text-sm">{order.special_instructions}</p>
-            </div>
-          )}
-
-          <div>
-            <p className="text-charcoal-400 text-xs mb-2">Items</p>
-            <div className="space-y-2">
-              {order.order_items?.map((oi) => (
-                <div key={oi.id} className="flex items-center justify-between text-sm bg-charcoal-900 rounded-lg p-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-charcoal-700 text-cream-300 text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                      {oi.quantity}
-                    </span>
-                    <span className="text-cream-100">{oi.item_name}</span>
+                {order.order_items?.map((oi) => (
+                  <div key={oi.id} className="flex items-center justify-between text-sm bg-charcoal-900 rounded-lg p-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-charcoal-700 text-cream-300 text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                        {oi.quantity}
+                      </span>
+                      <div>
+                        <div className="text-cream-100">{oi.item_name}</div>
+                        <div className="text-charcoal-400 text-xs">₹{oi.price.toFixed(2)} each</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-charcoal-300">₹{(oi.price * oi.quantity).toFixed(2)}</div>
+                      <div className="text-charcoal-500 text-xs">₹{oi.price.toFixed(2)} × {oi.quantity}</div>
+                    </div>
                   </div>
-                  <span className="text-charcoal-300">&#8377;{oi.price * oi.quantity}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+                ))}
 
           <div className="border-t border-charcoal-700/50 pt-3 flex justify-between">
             <span className="text-cream-50 font-heading font-bold">Total</span>
@@ -581,10 +1017,53 @@ function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => voi
   );
 }
 
+// =============== CATEGORIES MANAGEMENT ===============
+function CategoryTab({ addToast }: { addToast: (m: string) => void }) {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchCategories = useCallback(async () => {
+    const { data } = await supabase.from('categories').select('*').order('display_order');
+    setCategories(data ?? []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={28} className="animate-spin text-charcoal-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="animate-fade-in space-y-4">
+      <div className="grid gap-3">
+        {categories.map((c) => (
+          <div key={c.id} className="bg-charcoal-800 rounded-xl p-4 flex items-center justify-between border border-charcoal-700/30">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">{c.icon || '🍔'}</span>
+              <div>
+                <h3 className="font-heading font-semibold text-cream-50 text-sm">{c.name}</h3>
+                <p className="text-charcoal-400 text-xs">/{c.slug}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // =============== MENU MANAGEMENT ===============
-function MenuTab() {
+function MenuTab({ addToast }: { addToast: (m: string) => void }) {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -602,24 +1081,57 @@ function MenuTab() {
 
   useEffect(() => {
     fetchItems();
+    const onCats = () => fetchItems();
+    window.addEventListener('categoriesUpdated', onCats);
+    return () => window.removeEventListener('categoriesUpdated', onCats);
   }, [fetchItems]);
 
   const toggleAvailability = async (item: MenuItem) => {
-    setItems((prev) =>
-      prev.map((i) => (i.id === item.id ? { ...i, is_available: !i.is_available } : i))
-    );
-    await supabase.from('menu_items').update({ is_available: !item.is_available }).eq('id', item.id);
+    const newVal = !item.is_available;
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_available: newVal } : i)));
+    const { error } = await supabase.from('menu_items').update({ is_available: newVal }).eq('id', item.id);
+    if (error) {
+      // revert on error
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_available: item.is_available } : i)));
+      addToast(`Failed to update availability for ${item.name}`);
+    } else {
+      addToast(`${item.name} is now ${newVal ? 'Available' : 'Out of Stock'}`);
+    }
   };
 
   const deleteItem = async (item: MenuItem) => {
+    // check for references in historical order_items
+    const { data: refs, error: refErr } = await supabase.from('order_items').select('id').eq('menu_item_id', item.id).limit(1);
+    if (refErr) {
+      addToast('Failed to check item references');
+      return;
+    }
+    if (refs && refs.length > 0) {
+      // cannot safely hard-delete without affecting historical orders
+      if (!confirm(`Item "${item.name}" is referenced by past orders. Delete is unsafe. Mark as unavailable instead?`)) return;
+      await toggleAvailability({ ...item, is_available: false });
+      return;
+    }
     if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
     setItems((prev) => prev.filter((i) => i.id !== item.id));
-    await supabase.from('menu_items').delete().eq('id', item.id);
+    const { error } = await supabase.from('menu_items').delete().eq('id', item.id);
+    if (error) {
+      addToast(`Failed to delete ${item.name}`);
+      // refetch to restore UI
+      fetchItems();
+    } else {
+      addToast(`${item.name} deleted`);
+    }
   };
 
-  const filteredItems = search.trim()
-    ? items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
-    : items;
+  const filteredItems = items.filter((i) => {
+    const q = search.trim().toLowerCase();
+    if (q) {
+      if (!i.name.toLowerCase().includes(q) && !(i.category?.name ?? '').toLowerCase().includes(q)) return false;
+    }
+    if (categoryFilter !== 'all' && i.category_id !== categoryFilter) return false;
+    return true;
+  });
 
   if (loading) {
     return (
@@ -642,6 +1154,14 @@ function MenuTab() {
             placeholder="Search menu items..."
             className="w-full bg-charcoal-800 text-cream-50 placeholder-charcoal-500 text-sm rounded-full pl-9 pr-4 py-2.5 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
           />
+        </div>
+        <div>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-charcoal-800 text-cream-50 text-sm rounded-xl px-3 py-2 border border-charcoal-700/50">
+            <option value="all">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
         </div>
         <button
           onClick={() => setShowAddForm(true)}
@@ -669,16 +1189,34 @@ function MenuTab() {
                 {item.is_popular && (
                   <span className="text-gold-400 text-xs font-medium">★ Popular</span>
                 )}
-                <button
-                  onClick={() => toggleAvailability(item)}
-                  className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
-                    item.is_available
-                      ? 'text-green-400 bg-green-400/10'
-                      : 'text-rust-400 bg-rust-400/10'
-                  }`}
-                >
-                  {item.is_available ? 'Available' : 'Unavailable'}
-                </button>
+                  <button
+                    onClick={() => toggleAvailability(item)}
+                    className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
+                      item.is_available
+                        ? 'text-green-400 bg-green-400/10'
+                        : 'text-rust-400 bg-rust-400/10'
+                    }`}
+                  >
+                    {item.is_available ? 'Available' : 'Unavailable'}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const newVal = !item.is_popular;
+                      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_popular: newVal } : i)));
+                      const { error } = await supabase.from('menu_items').update({ is_popular: newVal }).eq('id', item.id);
+                      if (error) {
+                        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_popular: item.is_popular } : i)));
+                        addToast(`Failed to update popular flag for ${item.name}`);
+                      } else {
+                        addToast(`${item.name} is ${newVal ? 'Popular' : 'Not popular'}`);
+                      }
+                    }}
+                    className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
+                      item.is_popular ? 'text-gold-400 bg-gold-400/10' : 'text-charcoal-300 bg-charcoal-700/10'
+                    } ml-2`}
+                  >
+                    {item.is_popular ? '★ Popular' : 'Mark Popular'}
+                  </button>
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -732,12 +1270,12 @@ function MenuItemForm({
 }) {
   const [name, setName] = useState(item?.name ?? '');
   const [description, setDescription] = useState(item?.description ?? '');
-  const [price, setPrice] = useState(item?.price.toString() ?? '');
+  const [price, setPrice] = useState(item ? String(item.price) : '');
   const [imageUrl, setImageUrl] = useState(item?.image_url ?? '');
-  const [categoryId, setCategoryId] = useState(item?.category_id ?? categories[0]?.id ?? '');
+  const [categoryId, setCategoryId] = useState(item?.category_id ?? (categories[0]?.id ?? ''));
   const [isPopular, setIsPopular] = useState(item?.is_popular ?? false);
   const [isAvailable, setIsAvailable] = useState(item?.is_available ?? true);
-  const [displayOrder, setDisplayOrder] = useState(item?.display_order.toString() ?? '0');
+  const [displayOrder, setDisplayOrder] = useState(item ? String(item.display_order ?? 0) : '0');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -745,11 +1283,23 @@ function MenuItemForm({
     e.preventDefault();
     setSaving(true);
     setError('');
+    // validation
+    const parsedPrice = parseFloat(price);
+    if (!name.trim()) {
+      setError('Name is required');
+      setSaving(false);
+      return;
+    }
+    if (Number.isNaN(parsedPrice) || !isFinite(parsedPrice) || parsedPrice < 0) {
+      setError('Price must be a valid non-negative number');
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       name: name.trim(),
       description: description.trim() || null,
-      price: parseFloat(price),
+      price: parsedPrice,
       image_url: imageUrl.trim() || null,
       category_id: categoryId || null,
       is_popular: isPopular,
