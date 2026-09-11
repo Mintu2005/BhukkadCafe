@@ -72,10 +72,10 @@ function App() {
 
   return (
     <CartProvider>
-      <div className="min-h-screen bg-charcoal-900">
+      <div className="min-h-screen bg-charcoal-900 w-full max-w-full overflow-x-hidden relative">
         <TopNav currentPage={navPage} onNavigate={handleNavigate} />
 
-        <main className={`${isCheckout || isConfirmation ? '' : ''}`}>
+        <main className="w-full max-w-full overflow-x-hidden">
           {page === 'home' && (
             <HomePage onNavigate={handleNavigate} onItemSelect={handleItemSelect} />
           )}

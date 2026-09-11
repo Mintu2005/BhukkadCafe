@@ -126,10 +126,10 @@ export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProp
           </div>
 
           {/* Category chips - horizontal scroll */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:-mx-6 sm:px-6 pb-1">
             <button
               onClick={() => handleCategoryChange('all')}
-              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+              className={`flex-shrink-0 px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
                 selectedCategory === 'all'
                   ? 'bg-cream-400 text-charcoal-900'
                   : 'bg-charcoal-800 text-charcoal-200 hover:bg-charcoal-700 border border-charcoal-700/50'
@@ -157,8 +157,8 @@ export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProp
 
       {/* Sort & results count */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4">
-        <div className="flex items-center justify-between">
-          <p className="text-charcoal-300 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-charcoal-300 text-xs sm:text-sm">
             {loading ? 'Loading...' : `${filteredItems.length} item${filteredItems.length !== 1 ? 's' : ''}`}
           </p>
           <div className="flex items-center gap-2">
@@ -173,9 +173,9 @@ export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProp
             )}
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-1.5 text-charcoal-200 text-sm font-medium bg-charcoal-800 px-3 py-1.5 rounded-full border border-charcoal-700/50 hover:bg-charcoal-700 transition-colors"
+              className="flex items-center gap-1.5 text-charcoal-200 text-xs sm:text-sm font-medium bg-charcoal-800 px-3 py-1.5 rounded-full border border-charcoal-700/50 hover:bg-charcoal-700 transition-colors"
             >
-              <ArrowUpDown size={15} />
+              <ArrowUpDown size={14} />
               Sort
             </button>
           </div>
@@ -212,7 +212,7 @@ export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProp
       {/* Grid */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4">
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="bg-charcoal-800 rounded-2xl overflow-hidden">
                 <div className="aspect-square img-shimmer" />

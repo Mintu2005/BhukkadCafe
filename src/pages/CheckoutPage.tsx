@@ -115,7 +115,7 @@ export default function CheckoutPage({ onNavigate, onOrderPlaced }: CheckoutPage
 
         <div className="space-y-5">
           {/* Customer Details */}
-          <div className="bg-charcoal-800 rounded-2xl p-5 border border-charcoal-700/30">
+          <div className="bg-charcoal-800 rounded-2xl p-4 sm:p-5 border border-charcoal-700/30">
             <h2 className="font-heading font-semibold text-cream-50 text-base mb-4 flex items-center gap-2">
               <User size={18} className="text-cream-400" />
               Customer Details
@@ -142,7 +142,7 @@ export default function CheckoutPage({ onNavigate, onOrderPlaced }: CheckoutPage
                   Mobile Number
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="bg-charcoal-900 text-charcoal-300 text-sm font-medium px-3 py-3 rounded-xl border border-charcoal-700/50">
+                  <span className="bg-charcoal-900 text-charcoal-300 text-sm font-medium px-3 py-3 rounded-xl border border-charcoal-700/50 flex-shrink-0">
                     +91
                   </span>
                   <input
@@ -151,7 +151,7 @@ export default function CheckoutPage({ onNavigate, onOrderPlaced }: CheckoutPage
                     onChange={(e) => setMobileNumber(e.target.value)}
                     placeholder="10-digit mobile number"
                     maxLength={10}
-                    className="flex-1 bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-sm rounded-xl px-4 py-3 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+                    className="flex-1 min-w-0 bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-sm rounded-xl px-4 py-3 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
                   />
                 </div>
                 {errors.mobileNumber && (

@@ -91,16 +91,16 @@ export default function ContactPage() {
               loading="lazy"
             />
           </div>
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-charcoal-300 text-sm">
-              <MapPin size={16} className="text-cream-400" />
-              Paraw, area main bazar kandaghat. Kandaghat, Himachal Pradesh
+          <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-2 text-charcoal-300 text-xs sm:text-sm min-w-0">
+              <MapPin size={16} className="text-cream-400 flex-shrink-0 mt-0.5 sm:mt-0" />
+              <span className="break-words">Paraw, area main bazar kandaghat. Kandaghat, Himachal Pradesh</span>
             </div>
             <a
               href="https://www.google.com/maps/search/?api=1&query=Paraw+area+main+bazar+kandaghat+Kandaghat+Himachal+Pradesh"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-cream-400 text-sm font-medium hover:text-cream-300 transition-colors"
+              className="text-cream-400 text-xs sm:text-sm font-medium hover:text-cream-300 transition-colors flex-shrink-0"
             >
               Get Directions →
             </a>

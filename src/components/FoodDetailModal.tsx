@@ -54,25 +54,25 @@ export default function FoodDetailModal({ item, onClose, onGoToCart }: FoodDetai
       />
 
       {/* Modal */}
-      <div className="relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto bg-charcoal-800 rounded-t-3xl sm:rounded-3xl animate-slide-up scrollbar-hide">
+      <div className="relative w-full sm:max-w-lg max-h-[88vh] sm:max-h-[90vh] overflow-y-auto bg-charcoal-800 rounded-t-3xl sm:rounded-3xl animate-slide-up scrollbar-hide">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-charcoal-900/70 backdrop-blur-sm text-cream-50 flex items-center justify-center hover:bg-charcoal-900 transition-colors"
+          className="absolute top-3 right-3 z-10 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-charcoal-900/70 backdrop-blur-sm text-cream-50 flex items-center justify-center hover:bg-charcoal-900 transition-colors"
         >
-          <X size={20} />
+          <X size={18} />
         </button>
 
         {/* Back button (mobile) */}
         <button
           onClick={onClose}
-          className="sm:hidden absolute top-3 left-3 z-10 w-10 h-10 rounded-full bg-charcoal-900/70 backdrop-blur-sm text-cream-50 flex items-center justify-center hover:bg-charcoal-900 transition-colors"
+          className="sm:hidden absolute top-3 left-3 z-10 w-9 h-9 rounded-full bg-charcoal-900/70 backdrop-blur-sm text-cream-50 flex items-center justify-center hover:bg-charcoal-900 transition-colors"
         >
-          <ArrowLeft size={20} />
+          <ArrowLeft size={18} />
         </button>
 
         {/* Image */}
-        <div className="relative aspect-[4/3] sm:aspect-square overflow-hidden rounded-t-3xl img-shimmer">
+        <div className="relative aspect-video sm:aspect-[4/3] max-h-52 sm:max-h-72 overflow-hidden rounded-t-3xl img-shimmer">
           <img
             src={item.image_url || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&auto=format&fit=crop&q=80'}
             alt={item.name}
@@ -84,20 +84,20 @@ export default function FoodDetailModal({ item, onClose, onGoToCart }: FoodDetai
             }}
           />
           {item.is_popular && (
-            <div className="absolute top-4 left-16 sm:left-4 flex items-center gap-1 bg-rust-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">
-              <Star size={12} className="fill-current" />
+            <div className="absolute top-3 left-14 sm:left-4 flex items-center gap-1 bg-rust-500 text-white text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-lg">
+              <Star size={11} className="fill-current" />
               POPULAR
             </div>
           )}
         </div>
 
         {/* Content */}
-        <div className="p-5 sm:p-6">
+        <div className="p-4 sm:p-6">
           <div className="flex items-start justify-between gap-3 mb-2">
-            <h2 className="font-heading font-bold text-xl sm:text-2xl text-cream-50 leading-tight">
+            <h2 className="font-heading font-bold text-lg sm:text-2xl text-cream-50 leading-tight">
               {item.name}
             </h2>
-            <span className="font-heading font-bold text-2xl text-cream-400 flex-shrink-0">
+            <span className="font-heading font-bold text-xl sm:text-2xl text-cream-400 flex-shrink-0">
               &#8377;{item.price}
             </span>
           </div>

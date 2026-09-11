@@ -48,19 +48,19 @@ export default function FoodCard({ item, onClick }: FoodCardProps) {
         )}
       </div>
 
-      <div className="p-3 sm:p-4">
-        <h3 className="font-heading font-semibold text-cream-50 text-sm sm:text-base leading-tight line-clamp-2 min-h-[2.5rem]">
+      <div className="p-2.5 sm:p-4">
+        <h3 className="font-heading font-semibold text-cream-50 text-xs sm:text-sm sm:text-base leading-tight line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem]">
           {item.name}
         </h3>
         {item.description && (
-          <p className="text-charcoal-300 text-xs mt-1 line-clamp-2 min-h-[2rem]">
+          <p className="text-charcoal-300 text-[11px] sm:text-xs mt-1 line-clamp-2 min-h-[1.75rem] sm:min-h-[2rem]">
             {item.description}
           </p>
         )}
 
-        <div className="flex items-center justify-between mt-3 gap-2">
+        <div className="flex flex-wrap items-center justify-between mt-2.5 sm:mt-3 gap-1.5 sm:gap-2">
           <div className="flex items-baseline gap-1">
-            <span className="text-cream-400 font-heading font-bold text-base sm:text-lg">
+            <span className="text-cream-400 font-heading font-bold text-sm sm:text-base sm:text-lg">
               &#8377;{item.price}
             </span>
           </div>
@@ -76,7 +76,7 @@ export default function FoodCard({ item, onClick }: FoodCardProps) {
             <button
               onClick={handleAdd}
               disabled={!item.is_available}
-              className="flex items-center gap-1 bg-cream-400 hover:bg-cream-300 text-charcoal-900 text-xs font-bold px-3 py-2 rounded-full transition-all duration-200 active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 bg-cream-400 hover:bg-cream-300 text-charcoal-900 text-xs font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-full transition-all duration-200 active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus size={14} strokeWidth={3} />
               Add

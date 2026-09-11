@@ -145,14 +145,22 @@ export default function OrdersPage({ onNavigate, onTrackOrder, trackOrder }: Ord
               });
 
               return (
-                <button
+                <div
                   key={order.id}
                   onClick={() => onTrackOrder(order)}
-                  className="w-full text-left bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30 hover:border-charcoal-600 transition-all duration-200 hover:shadow-lg group"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onTrackOrder(order);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  className="w-full text-left bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30 hover:border-charcoal-600 transition-all duration-200 hover:shadow-lg group cursor-pointer focus:outline-none focus:border-cream-400/50"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div>
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-heading font-bold text-cream-50 text-base">{order.order_number}</span>
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status]}`}>
                           {ORDER_STATUS_LABELS[order.status]}
@@ -163,10 +171,10 @@ export default function OrdersPage({ onNavigate, onTrackOrder, trackOrder }: Ord
                         {dateStr}
                       </p>
                     </div>
-                    <ChevronRight size={20} className="text-charcoal-500 group-hover:text-cream-300 group-hover:translate-x-0.5 transition-all" />
+                    <ChevronRight size={20} className="text-charcoal-500 group-hover:text-cream-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                   </div>
 
-                  <div className="flex items-center gap-3 text-xs text-charcoal-300">
+                  <div className="flex items-center gap-2 sm:gap-3 text-xs text-charcoal-300 flex-wrap">
                     <span className="flex items-center gap-1">
                       {order.order_type === 'dine_in' ? <Utensils size={13} /> : <ShoppingBag size={13} />}
                       {order.order_type === 'dine_in' ? 'Dine In' : 'Takeaway'}
@@ -184,17 +192,18 @@ export default function OrdersPage({ onNavigate, onTrackOrder, trackOrder }: Ord
                   )}
                   <div className="mt-3 flex gap-2">
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         const url = getWhatsAppUrl(order as Order);
                         window.open(url, '_blank');
                       }}
-                      className="text-sm bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-full flex items-center gap-2"
+                      className="text-xs sm:text-sm bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 sm:py-2 rounded-full flex items-center gap-1.5 transition-colors"
                     >
                       📱 Get Bill on WhatsApp
                     </button>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

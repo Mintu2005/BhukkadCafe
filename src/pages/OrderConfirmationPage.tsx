@@ -107,7 +107,7 @@ export default function OrderConfirmationPage({ order, onNavigate, onTrackOrder 
         )}
 
         {/* Order number card */}
-        <div className="bg-charcoal-800 rounded-2xl p-5 border border-charcoal-700/30 mb-4">
+        <div className="bg-charcoal-800 rounded-2xl p-4 sm:p-5 border border-charcoal-700/30 mb-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Receipt size={18} className="text-cream-400" />
@@ -116,22 +116,22 @@ export default function OrderConfirmationPage({ order, onNavigate, onTrackOrder 
             <span className="font-heading font-bold text-xl text-cream-400">{currentOrder.order_number}</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="bg-charcoal-900 rounded-xl py-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
+            <div className="bg-charcoal-900 rounded-xl py-2.5 sm:py-3 px-1">
               <p className="text-charcoal-400 text-xs mb-0.5">Type</p>
-              <p className="text-cream-50 font-medium text-sm capitalize">
+              <p className="text-cream-50 font-medium text-xs sm:text-sm capitalize truncate">
                 {currentOrder.order_type === 'dine_in' ? 'Dine In' : 'Takeaway'}
               </p>
             </div>
             {currentOrder.table_number && (
-              <div className="bg-charcoal-900 rounded-xl py-3">
+              <div className="bg-charcoal-900 rounded-xl py-2.5 sm:py-3 px-1">
                 <p className="text-charcoal-400 text-xs mb-0.5">Table</p>
-                <p className="text-cream-50 font-medium text-sm">{currentOrder.table_number}</p>
+                <p className="text-cream-50 font-medium text-xs sm:text-sm truncate">{currentOrder.table_number}</p>
               </div>
             )}
-            <div className="bg-charcoal-900 rounded-xl py-3">
+            <div className="bg-charcoal-900 rounded-xl py-2.5 sm:py-3 px-1">
               <p className="text-charcoal-400 text-xs mb-0.5">Total</p>
-              <p className="text-cream-400 font-bold text-sm">&#8377;{currentOrder.total}</p>
+              <p className="text-cream-400 font-bold text-xs sm:text-sm">&#8377;{currentOrder.total}</p>
             </div>
           </div>
         </div>

@@ -13,12 +13,12 @@ export default function QuantitySelector({
   onDecrement,
   size = 'md',
 }: QuantitySelectorProps) {
-  const btnSize = size === 'sm' ? 'w-7 h-7' : 'w-9 h-9';
-  const iconSize = size === 'sm' ? 14 : 16;
-  const textSize = size === 'sm' ? 'text-sm' : 'text-base';
+  const btnSize = size === 'sm' ? 'w-6 h-6 sm:w-7 sm:h-7' : 'w-8 h-8 sm:w-9 sm:h-9';
+  const iconSize = size === 'sm' ? 12 : 16;
+  const textSize = size === 'sm' ? 'text-xs sm:text-sm' : 'text-sm sm:text-base';
 
   return (
-    <div className="inline-flex items-center gap-1 bg-charcoal-700 rounded-full p-1 select-none">
+    <div className="inline-flex items-center gap-0.5 sm:gap-1 bg-charcoal-700 rounded-full p-0.5 sm:p-1 select-none flex-shrink-0">
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -29,7 +29,7 @@ export default function QuantitySelector({
       >
         <Minus size={iconSize} strokeWidth={2.5} />
       </button>
-      <span className={`font-heading font-bold ${textSize} text-cream-50 min-w-[1.5rem] text-center tabular-nums`}>
+      <span className={`font-heading font-bold ${textSize} text-cream-50 min-w-[1.1rem] sm:min-w-[1.5rem] text-center tabular-nums`}>
         {quantity}
       </span>
       <button

@@ -21,8 +21,8 @@ export default function BottomNav({ currentPage, onNavigate }: BottomNavProps) {
   const cartCount = getTotalItems();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-charcoal-800/95 backdrop-blur-lg border-t border-charcoal-700 md:hidden">
-      <div className="flex items-center justify-around px-2 py-2 safe-area-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-charcoal-800/95 backdrop-blur-lg border-t border-charcoal-700 md:hidden w-full">
+      <div className="flex items-center justify-around px-1 sm:px-2 py-1.5 sm:py-2 safe-area-bottom w-full max-w-full">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
@@ -32,7 +32,7 @@ export default function BottomNav({ currentPage, onNavigate }: BottomNavProps) {
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`relative flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition-all duration-200 ${
+              className={`relative flex flex-col items-center gap-0.5 sm:gap-1 px-1 sm:px-3 py-1 sm:py-1.5 rounded-xl transition-all duration-200 flex-1 max-w-[72px] min-w-0 ${
                 isActive
                   ? 'text-cream-400'
                   : 'text-charcoal-300 active:text-cream-200'
@@ -40,20 +40,20 @@ export default function BottomNav({ currentPage, onNavigate }: BottomNavProps) {
             >
               <div className="relative">
                 <Icon
-                  size={22}
-                  className={`transition-transform duration-200 ${
+                  size={20}
+                  className={`transition-transform duration-200 sm:w-[22px] sm:h-[22px] ${
                     isActive ? 'scale-110' : ''
                   }`}
                   strokeWidth={isActive ? 2.5 : 2}
                 />
                 {showBadge && (
-                  <span className="absolute -top-2 -right-2 bg-rust-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-scale-in">
+                  <span className="absolute -top-1.5 -right-2 bg-rust-500 text-white text-[9px] sm:text-[10px] font-bold rounded-full min-w-[16px] sm:min-w-[18px] h-[16px] sm:h-[18px] flex items-center justify-center px-1 animate-scale-in">
                     {cartCount > 99 ? '99+' : cartCount}
                   </span>
                 )}
               </div>
               <span
-                className={`text-[10px] font-medium ${
+                className={`text-[9px] sm:text-[10px] font-medium leading-tight truncate max-w-full ${
                   isActive ? 'font-semibold' : ''
                 }`}
               >

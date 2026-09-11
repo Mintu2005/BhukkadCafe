@@ -6,13 +6,21 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    max-width: 100%;
+    width: 100%;
   }
   body {
     @apply bg-charcoal-900 text-cream-50 font-sans;
     overscroll-behavior-y: none;
+    overflow-x: hidden;
+    max-width: 100%;
+    width: 100%;
+    position: relative;
   }
   * {
     -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
   }
 }
 

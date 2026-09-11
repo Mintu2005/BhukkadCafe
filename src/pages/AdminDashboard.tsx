@@ -459,32 +459,32 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-charcoal-950">
+    <div className="min-h-screen bg-charcoal-950 w-full max-w-full overflow-x-hidden relative">
       {/* Top bar */}
       <header className="sticky top-0 z-40 bg-charcoal-900/90 backdrop-blur-lg border-b border-charcoal-700/50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cream-400 to-gold-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cream-400 to-gold-600 flex items-center justify-center flex-shrink-0">
               <span className="font-display text-charcoal-900 text-sm">B</span>
             </div>
-            <span className="font-heading font-bold text-cream-50 text-sm">Bhukkad Admin</span>
+            <span className="font-heading font-bold text-cream-50 text-xs sm:text-sm">Bhukkad Admin</span>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             {/* Audio Alert Status / Unlock Button */}
             {!audioUnlocked ? (
               <button
                 onClick={handleUnlockAudio}
-                className="flex items-center gap-1.5 bg-gold-400/20 hover:bg-gold-400/30 text-gold-300 border border-gold-400/40 px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold transition-colors"
+                className="flex items-center gap-1.5 bg-gold-400/20 hover:bg-gold-400/30 text-gold-300 border border-gold-400/40 px-2 sm:px-3 py-1 rounded-full text-xs font-semibold transition-colors flex-shrink-0"
                 title="Click to enable sound alerts for new incoming orders"
               >
                 <BellRing size={13} />
                 <span className="hidden sm:inline">Enable Order Alerts</span>
-                <span className="sm:hidden">Enable Sound</span>
+                <span className="sm:hidden">Alerts</span>
               </button>
             ) : (
               <div
-                className="flex items-center gap-1.5 text-cream-400/80 text-xs font-medium px-2.5 py-1 rounded-full bg-charcoal-800 border border-charcoal-700/40"
+                className="flex items-center gap-1.5 text-cream-400/80 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full bg-charcoal-800 border border-charcoal-700/40 flex-shrink-0"
                 title="Audio alerts are active"
               >
                 <Volume2 size={13} className="text-green-400" />
@@ -494,9 +494,9 @@ export default function AdminDashboard() {
 
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 text-charcoal-300 hover:text-rust-400 text-sm font-medium transition-colors"
+              className="flex items-center gap-1 sm:gap-1.5 text-charcoal-300 hover:text-rust-400 text-xs sm:text-sm font-medium transition-colors px-2 py-1 rounded-lg flex-shrink-0"
             >
-              <LogOut size={16} />
+              <LogOut size={15} />
               <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
@@ -505,11 +505,11 @@ export default function AdminDashboard() {
 
       {/* Persistent Ringing Alert Banner when popup is minimized */}
       {unhandledOrders.length > 0 && !isAlertModalOpen && (
-        <div className="sticky top-14 z-35 bg-gradient-to-r from-rust-600 via-gold-600 to-rust-600 text-white px-4 py-2 text-xs sm:text-sm font-bold flex items-center justify-between shadow-lg shadow-black/50 border-b border-gold-400/40">
-          <div className="flex items-center gap-2">
-            <BellRing size={16} className="flex-shrink-0" />
-            <span>
-              🔔 {unhandledOrders.length} New Order{unhandledOrders.length > 1 ? 's' : ''} Pending Review — Ringing...
+        <div className="sticky top-14 z-35 bg-gradient-to-r from-rust-600 via-gold-600 to-rust-600 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold flex flex-wrap items-center justify-between gap-2 shadow-lg shadow-black/50 border-b border-gold-400/40">
+          <div className="flex items-center gap-2 min-w-0">
+            <BellRing size={15} className="flex-shrink-0 animate-bounce" />
+            <span className="truncate">
+              🔔 {unhandledOrders.length} New Order{unhandledOrders.length > 1 ? 's' : ''} Pending Review
             </span>
           </div>
           <button
@@ -522,8 +522,8 @@ export default function AdminDashboard() {
       )}
 
       {/* Tabs */}
-      <div className="sticky top-14 z-30 bg-charcoal-900/90 backdrop-blur-lg border-b border-charcoal-700/30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex gap-1">
+      <div className="sticky top-14 z-30 bg-charcoal-900/90 backdrop-blur-lg border-b border-charcoal-700/30 w-full">
+        <div className="max-w-6xl mx-auto px-2 sm:px-6 flex gap-1 overflow-x-auto scrollbar-hide">
           {[
             { id: 'overview' as AdminTab, label: 'Overview', icon: TrendingUp },
             { id: 'orders' as AdminTab, label: 'Orders', icon: ShoppingBag },
@@ -536,13 +536,13 @@ export default function AdminDashboard() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all duration-200 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-all duration-200 flex-shrink-0 whitespace-nowrap ${
                   tab === t.id
                     ? 'border-cream-400 text-cream-400'
                     : 'border-transparent text-charcoal-400 hover:text-cream-200'
                 }`}
               >
-                <Icon size={16} />
+                <Icon size={15} />
                 {t.label}
                 {t.id === 'orders' && unhandledOrders.length > 0 && (
                   <span className="bg-rust-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full inline-flex items-center justify-center min-w-[18px] leading-none">
@@ -555,7 +555,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 w-full">
         {tab === 'overview' && <OverviewTab addToast={addToast} unhandledCount={unhandledOrders.length} />}
         {tab === 'orders' && (
           <OrdersTab
@@ -1164,28 +1164,39 @@ function OrdersTab({
 
   return (
     <div className="animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 -mx-4 px-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 mb-4">
         <div className="flex-1 min-w-0">
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by order ID, customer, or phone..."
-            className="w-full bg-charcoal-800 text-cream-50 placeholder-charcoal-500 text-sm rounded-full px-4 py-2 border border-charcoal-700/50"
+            className="w-full bg-charcoal-800 text-cream-50 placeholder-charcoal-500 text-xs sm:text-sm rounded-full px-4 py-2.5 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <input type="date" className="bg-charcoal-800 text-cream-50 rounded px-2 py-2 border border-charcoal-700/50" onChange={(e) => setDateFrom(e.target.value || null)} />
-          <input type="date" className="bg-charcoal-800 text-cream-50 rounded px-2 py-2 border border-charcoal-700/50" onChange={(e) => setDateTo(e.target.value || null)} />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <input
+            type="date"
+            aria-label="Start date"
+            className="flex-1 sm:flex-none bg-charcoal-800 text-cream-50 text-xs sm:text-sm rounded-xl px-2.5 py-2 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+            onChange={(e) => setDateFrom(e.target.value || null)}
+          />
+          <span className="text-charcoal-500 text-xs">to</span>
+          <input
+            type="date"
+            aria-label="End date"
+            className="flex-1 sm:flex-none bg-charcoal-800 text-cream-50 text-xs sm:text-sm rounded-xl px-2.5 py-2 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+            onChange={(e) => setDateTo(e.target.value || null)}
+          />
         </div>
       </div>
       {/* Filter tabs */}
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-4 -mx-4 px-4">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-4 -mx-1 px-1 sm:mx-0 sm:px-0">
         {filterTabs.map((ft) => (
           <button
             key={ft.value}
             onClick={() => setFilter(ft.value)}
-            className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+            className={`flex-shrink-0 px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
               filter === ft.value
                 ? 'bg-cream-400 text-charcoal-900'
                 : 'bg-charcoal-800 text-charcoal-300 hover:bg-charcoal-700 border border-charcoal-700/50'
@@ -1585,79 +1596,79 @@ function MenuTab({ addToast }: { addToast: (m: string) => void }) {
   return (
     <div className="animate-fade-in">
       {/* Search & Add */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 mb-4">
+        <div className="relative flex-1 min-w-[170px]">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-500" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search menu items..."
-            className="w-full bg-charcoal-800 text-cream-50 placeholder-charcoal-500 text-sm rounded-full pl-9 pr-4 py-2.5 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+            className="w-full bg-charcoal-800 text-cream-50 placeholder-charcoal-500 text-xs sm:text-sm rounded-full pl-9 pr-4 py-2 sm:py-2.5 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
           />
         </div>
-        <div>
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-charcoal-800 text-cream-50 text-sm rounded-xl px-3 py-2 border border-charcoal-700/50">
+        <div className="flex items-center gap-2">
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-charcoal-800 text-cream-50 text-xs sm:text-sm rounded-xl px-2.5 py-2 border border-charcoal-700/50 focus:outline-none">
             <option value="all">All categories</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="flex items-center gap-1.5 bg-cream-400 hover:bg-cream-300 text-charcoal-900 text-xs sm:text-sm font-bold px-3 sm:px-4 py-2 sm:py-2.5 rounded-full transition-colors flex-shrink-0"
+          >
+            <Plus size={16} strokeWidth={3} />
+            <span>Add Item</span>
+          </button>
         </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-1.5 bg-cream-400 hover:bg-cream-300 text-charcoal-900 text-sm font-bold px-4 py-2.5 rounded-full transition-colors flex-shrink-0"
-        >
-          <Plus size={18} strokeWidth={3} />
-          <span className="hidden sm:inline">Add Item</span>
-        </button>
       </div>
 
       {/* Items list */}
       <div className="space-y-2">
         {filteredItems.map((item) => (
-          <div key={item.id} className="bg-charcoal-800 rounded-xl p-3 flex items-center gap-3 border border-charcoal-700/30">
-            <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-charcoal-700">
+          <div key={item.id} className="bg-charcoal-800 rounded-xl p-3 flex items-center gap-2.5 sm:gap-3 border border-charcoal-700/30">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden flex-shrink-0 bg-charcoal-700">
               {item.image_url && (
                 <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-heading font-semibold text-cream-50 text-sm truncate">{item.name}</h3>
-              <p className="text-charcoal-400 text-xs">{item.category?.name ?? 'Uncategorized'}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-cream-400 font-bold text-sm">&#8377;{item.price}</span>
+              <h3 className="font-heading font-semibold text-cream-50 text-xs sm:text-sm truncate">{item.name}</h3>
+              <p className="text-charcoal-400 text-[11px] sm:text-xs">{item.category?.name ?? 'Uncategorized'}</p>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                <span className="text-cream-400 font-bold text-xs sm:text-sm">&#8377;{item.price}</span>
                 {item.is_popular && (
-                  <span className="text-gold-400 text-xs font-medium">★ Popular</span>
+                  <span className="text-gold-400 text-[10px] sm:text-xs font-medium">★ Popular</span>
                 )}
-                  <button
-                    onClick={() => toggleAvailability(item)}
-                    className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
-                      item.is_available
-                        ? 'text-green-400 bg-green-400/10'
-                        : 'text-rust-400 bg-rust-400/10'
-                    }`}
-                  >
-                    {item.is_available ? 'Available' : 'Unavailable'}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const newVal = !item.is_popular;
-                      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_popular: newVal } : i)));
-                      const { error } = await supabase.from('menu_items').update({ is_popular: newVal }).eq('id', item.id);
-                      if (error) {
-                        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_popular: item.is_popular } : i)));
-                        addToast(`Failed to update popular flag for ${item.name}`);
-                      } else {
-                        addToast(`${item.name} is ${newVal ? 'Popular' : 'Not popular'}`);
-                      }
-                    }}
-                    className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
-                      item.is_popular ? 'text-gold-400 bg-gold-400/10' : 'text-charcoal-300 bg-charcoal-700/10'
-                    } ml-2`}
-                  >
-                    {item.is_popular ? '★ Popular' : 'Mark Popular'}
-                  </button>
+                <button
+                  onClick={() => toggleAvailability(item)}
+                  className={`text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
+                    item.is_available
+                      ? 'text-green-400 bg-green-400/10'
+                      : 'text-rust-400 bg-rust-400/10'
+                  }`}
+                >
+                  {item.is_available ? 'Available' : 'Unavailable'}
+                </button>
+                <button
+                  onClick={async () => {
+                    const newVal = !item.is_popular;
+                    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_popular: newVal } : i)));
+                    const { error } = await supabase.from('menu_items').update({ is_popular: newVal }).eq('id', item.id);
+                    if (error) {
+                      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_popular: item.is_popular } : i)));
+                      addToast(`Failed to update popular flag for ${item.name}`);
+                    } else {
+                      addToast(`${item.name} is ${newVal ? 'Popular' : 'Not popular'}`);
+                    }
+                  }}
+                  className={`text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${
+                    item.is_popular ? 'text-gold-400 bg-gold-400/10' : 'text-charcoal-300 bg-charcoal-700/10'
+                  }`}
+                >
+                  {item.is_popular ? '★ Popular' : 'Mark Popular'}
+                </button>
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
