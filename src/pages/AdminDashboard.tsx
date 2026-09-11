@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Order, OrderStatus, MenuItem, Category, OrderItem } from '@/lib/types';
 import type { Session, AuthChangeEvent } from '@supabase/supabase-js';
@@ -16,6 +16,8 @@ import {
   Clock,
   ChefHat,
   Bell,
+  BellRing,
+  Volume2,
   Package,
   Loader2,
   TrendingUp,
@@ -23,10 +25,14 @@ import {
   Search,
   Eye,
   BarChart as BarChartIcon,
+  Upload,
+  RefreshCw,
 } from 'lucide-react';
+import { orderAlertPlayer, showBrowserOrderNotification } from '@/lib/order-alert-sound';
+import NewOrderAlertModal from '@/components/NewOrderAlertModal';
 
 type AdminTab = 'overview' | 'orders' | 'menu' | 'categories' | 'analytics';
-type AdminView = 'login' | 'dashboard';
+type AdminView = 'login' | 'dashboard' | 'unauthorized';
 
 const STATUS_FLOW: OrderStatus[] = ['pending', 'accepted', 'preparing', 'ready', 'completed'];
 
@@ -48,40 +54,342 @@ export default function AdminDashboard() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [toasts, setToasts] = useState<Array<{ id: string; message: string }>>([]);
 
-  const addToast = (message: string) => {
+  const addToast = useCallback((message: string) => {
     const id = String(Date.now()) + Math.random().toString(36).slice(2, 7);
     setToasts((t) => [...t, { id, message }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
-  };
+  }, []);
+
+  const checkSessionRole = useCallback((session: Session | null) => {
+    if (!session) {
+      setView('login');
+      return;
+    }
+    const role = (session.user?.app_metadata as Record<string, unknown> | undefined)?.role;
+    if (role === 'admin') {
+      setView('dashboard');
+    } else {
+      setView('unauthorized');
+    }
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }: { data: { session: Session | null } | null }) => {
-      if (data?.session) setView('dashboard');
+      checkSessionRole(data?.session ?? null);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      setView(session ? 'dashboard' : 'login');
+      checkSessionRole(session);
     });
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [checkSessionRole]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginLoading(true);
     setLoginError('');
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
     if (error) {
       setLoginError(error.message);
+    } else if (data?.session) {
+      const role = (data.session.user?.app_metadata as Record<string, unknown> | undefined)?.role;
+      if (role !== 'admin') {
+        await supabase.auth.signOut();
+        setView('unauthorized');
+        setLoginError('Access denied: You do not have administrator privileges.');
+      }
     }
     setLoginLoading(false);
   };
 
+  // Real-time Order Alert State
+  const [unhandledOrders, setUnhandledOrders] = useState<Order[]>([]);
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+  const [currentAlertIndex, setCurrentAlertIndex] = useState(0);
+  const [alertActionLoadingId, setAlertActionLoadingId] = useState<string | null>(null);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+
+  const unhandledOrderIds = useMemo(() => new Set(unhandledOrders.map((o) => o.id)), [unhandledOrders]);
+
+  // Manual & automatic audio context unlock
+  const handleUnlockAudio = useCallback(async () => {
+    const success = await orderAlertPlayer.unlock();
+    if (success) setAudioUnlocked(true);
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const onUserInteraction = async () => {
+      const success = await orderAlertPlayer.unlock();
+      if (success) {
+        setAudioUnlocked(true);
+        window.removeEventListener('click', onUserInteraction);
+        window.removeEventListener('keydown', onUserInteraction);
+      }
+    };
+    window.addEventListener('click', onUserInteraction);
+    window.addEventListener('keydown', onUserInteraction);
+    return () => {
+      window.removeEventListener('click', onUserInteraction);
+      window.removeEventListener('keydown', onUserInteraction);
+    };
+  }, []);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      orderAlertPlayer.cleanup();
+    };
+  }, []);
+
+  const handledOrderIdsRef = useRef<Set<string>>(new Set());
+  const activeAlertingOrderIdsRef = useRef<Set<string>>(new Set());
+
+  // Central trigger for new order alert & ringing
+  const triggerNewOrderAlert = useCallback((order: Order) => {
+    if (!order || !order.id) return;
+    if (handledOrderIdsRef.current.has(order.id)) {
+      return;
+    }
+    // Prevent re-triggering alert if already actively alerting
+    if (activeAlertingOrderIdsRef.current.has(order.id)) {
+      return;
+    }
+    activeAlertingOrderIdsRef.current.add(order.id);
+
+    console.log('[Realtime Alert] Triggering alert for order:', order.order_number, order);
+    setUnhandledOrders((prev) => {
+      if (prev.some((o) => o.id === order.id)) return prev;
+      return [order, ...prev];
+    });
+    setIsAlertModalOpen(true);
+    setCurrentAlertIndex(0);
+
+    // Start continuous ring
+    orderAlertPlayer.startRinging();
+
+    // Browser notification
+    showBrowserOrderNotification(order);
+
+    addToast(`🔔 New Order #${order.order_number} received!`);
+  }, [addToast]);
+
+  // Polling fallback to guarantee pending orders are detected even if WebSocket drops or table publication is pending
+  useEffect(() => {
+    if (view !== 'dashboard') return;
+
+    const checkPendingOrders = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (!error && data && data.length > 0) {
+          for (const order of data as Order[]) {
+            if (!handledOrderIdsRef.current.has(order.id) && !activeAlertingOrderIdsRef.current.has(order.id)) {
+              console.log('[Realtime Alert] Poller detected unhandled pending order:', order.order_number);
+              triggerNewOrderAlert(order);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Realtime Alert] Pending orders check failed:', err);
+      }
+    };
+
+    // Run immediately on dashboard load
+    checkPendingOrders();
+    const pollInterval = setInterval(checkPendingOrders, 5000);
+    return () => clearInterval(pollInterval);
+  }, [view, triggerNewOrderAlert]);
+
+  // Global Real-time Subscription for incoming orders
+  useEffect(() => {
+    if (view !== 'dashboard') return;
+
+    console.log('[Realtime] Initializing admin_dashboard_orders_channel...');
+    const channel = supabase.channel('admin_dashboard_orders_channel');
+
+    channel.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'orders' },
+      async (payload: { new?: Order }) => {
+        console.log('[Realtime] Received INSERT payload:', payload);
+        const newRow = payload.new;
+        if (!newRow || !newRow.id) {
+          console.warn('[Realtime] INSERT event had no valid new row');
+          return;
+        }
+
+        console.log('[Realtime] Fetching complete order for id:', newRow.id);
+        let completeOrder: Order = newRow;
+        try {
+          const { data: fullOrder, error: fetchErr } = await supabase
+            .from('orders')
+            .select('*, order_items(*)')
+            .eq('id', newRow.id)
+            .maybeSingle();
+
+          if (fetchErr) {
+            console.error('[Realtime] Error fetching complete order with items:', fetchErr);
+          } else if (fullOrder) {
+            completeOrder = fullOrder as Order;
+            console.log('[Realtime] Fetched complete order:', completeOrder);
+          }
+        } catch (queryErr) {
+          console.error('[Realtime] Exception querying order details:', queryErr);
+        }
+
+        if (completeOrder.status === 'pending') {
+          triggerNewOrderAlert(completeOrder);
+        } else {
+          console.log('[Realtime] Order status is not pending, skipping alert:', completeOrder.status);
+        }
+      }
+    );
+
+    channel.on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'orders' },
+      (payload: { new?: Partial<Order> }) => {
+        console.log('[Realtime] Received UPDATE payload:', payload);
+        const updated = payload.new;
+        if (!updated?.id) return;
+
+        // Requirement: Stop ringing ONLY when order is ACCEPTED or REJECTED
+        if (updated.status === 'accepted' || updated.status === 'rejected') {
+          handledOrderIdsRef.current.add(updated.id);
+          activeAlertingOrderIdsRef.current.delete(updated.id);
+          setUnhandledOrders((prev) => {
+            if (!prev.some((o) => o.id === updated.id)) return prev;
+            const next = prev.filter((o) => o.id !== updated.id);
+            if (next.length === 0) {
+              orderAlertPlayer.stopRinging();
+              setIsAlertModalOpen(false);
+            }
+            return next;
+          });
+        }
+      }
+    );
+
+    channel.subscribe((status: string, err?: Error) => {
+      console.log('[Realtime] Subscription status:', status);
+      if (err) {
+        console.error('[Realtime] Subscription error:', err);
+      }
+    });
+
+    return () => {
+      console.log('[Realtime] Removing admin_dashboard_orders_channel...');
+      supabase.removeChannel(channel);
+    };
+  }, [view, triggerNewOrderAlert]);
+
+  // Alert Modal Accept / Reject actions
+  const handleAlertAccept = async (orderId: string) => {
+    setAlertActionLoadingId(orderId);
+    handledOrderIdsRef.current.add(orderId);
+    activeAlertingOrderIdsRef.current.delete(orderId);
+    try {
+      const { error } = await supabase.from('orders').update({ status: 'accepted' }).eq('id', orderId);
+      if (error) throw error;
+
+      addToast('Order accepted');
+      setUnhandledOrders((prev) => {
+        if (!prev.some((o) => o.id === orderId)) return prev;
+        const next = prev.filter((o) => o.id !== orderId);
+        if (next.length === 0) {
+          orderAlertPlayer.stopRinging();
+          setIsAlertModalOpen(false);
+        } else {
+          setCurrentAlertIndex((i) => Math.min(i, next.length - 1));
+        }
+        return next;
+      });
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to accept order');
+    } finally {
+      setAlertActionLoadingId(null);
+    }
+  };
+
+  const handleAlertReject = async (orderId: string) => {
+    setAlertActionLoadingId(orderId);
+    handledOrderIdsRef.current.add(orderId);
+    activeAlertingOrderIdsRef.current.delete(orderId);
+    try {
+      const { error } = await supabase.from('orders').update({ status: 'rejected' }).eq('id', orderId);
+      if (error) throw error;
+
+      addToast('Order rejected');
+      setUnhandledOrders((prev) => {
+        if (!prev.some((o) => o.id === orderId)) return prev;
+        const next = prev.filter((o) => o.id !== orderId);
+        if (next.length === 0) {
+          orderAlertPlayer.stopRinging();
+          setIsAlertModalOpen(false);
+        } else {
+          setCurrentAlertIndex((i) => Math.min(i, next.length - 1));
+        }
+        return next;
+      });
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to reject order');
+    } finally {
+      setAlertActionLoadingId(null);
+    }
+  };
+
   const handleLogout = async () => {
+    orderAlertPlayer.stopRinging();
+    setUnhandledOrders([]);
+    setIsAlertModalOpen(false);
     await supabase.auth.signOut();
     setView('login');
   };
+
+  if (view === 'unauthorized') {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 bg-charcoal-950">
+        <div className="w-full max-w-md text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-rust-500/10 border border-rust-500/30 mb-4">
+            <AlertCircle size={32} className="text-rust-400" />
+          </div>
+          <h1 className="font-heading font-bold text-2xl text-cream-50">Access Denied</h1>
+          <p className="text-charcoal-400 text-sm mt-2 mb-6">
+            Your account does not have administrator privileges. Only verified administrators can access this dashboard.
+          </p>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full bg-charcoal-800 hover:bg-charcoal-700 text-cream-200 font-medium text-sm py-3 rounded-xl transition-colors border border-charcoal-700/50"
+            >
+              Sign Out &amp; Return to Login
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = '';
+                window.location.reload();
+              }}
+              className="block w-full text-center text-cream-400 hover:text-cream-300 text-sm font-medium py-2 transition-colors"
+            >
+              ← Back to Cafe Menu
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (view === 'login') {
     return (
@@ -161,15 +469,57 @@ export default function AdminDashboard() {
             </div>
             <span className="font-heading font-bold text-cream-50 text-sm">Bhukkad Admin</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 text-charcoal-300 hover:text-rust-400 text-sm font-medium transition-colors"
-          >
-            <LogOut size={16} />
-            <span className="hidden sm:inline">Logout</span>
-          </button>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Audio Alert Status / Unlock Button */}
+            {!audioUnlocked ? (
+              <button
+                onClick={handleUnlockAudio}
+                className="flex items-center gap-1.5 bg-gold-400/20 hover:bg-gold-400/30 text-gold-300 border border-gold-400/40 px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold transition-colors"
+                title="Click to enable sound alerts for new incoming orders"
+              >
+                <BellRing size={13} />
+                <span className="hidden sm:inline">Enable Order Alerts</span>
+                <span className="sm:hidden">Enable Sound</span>
+              </button>
+            ) : (
+              <div
+                className="flex items-center gap-1.5 text-cream-400/80 text-xs font-medium px-2.5 py-1 rounded-full bg-charcoal-800 border border-charcoal-700/40"
+                title="Audio alerts are active"
+              >
+                <Volume2 size={13} className="text-green-400" />
+                <span className="hidden sm:inline text-charcoal-300">Alerts Active</span>
+              </div>
+            )}
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 text-charcoal-300 hover:text-rust-400 text-sm font-medium transition-colors"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* Persistent Ringing Alert Banner when popup is minimized */}
+      {unhandledOrders.length > 0 && !isAlertModalOpen && (
+        <div className="sticky top-14 z-35 bg-gradient-to-r from-rust-600 via-gold-600 to-rust-600 text-white px-4 py-2 text-xs sm:text-sm font-bold flex items-center justify-between shadow-lg shadow-black/50 border-b border-gold-400/40">
+          <div className="flex items-center gap-2">
+            <BellRing size={16} className="flex-shrink-0" />
+            <span>
+              🔔 {unhandledOrders.length} New Order{unhandledOrders.length > 1 ? 's' : ''} Pending Review — Ringing...
+            </span>
+          </div>
+          <button
+            onClick={() => setIsAlertModalOpen(true)}
+            className="bg-charcoal-900/90 hover:bg-charcoal-900 text-cream-200 text-xs px-3 py-1 rounded-full font-heading font-bold transition-colors border border-cream-400/30 flex-shrink-0"
+          >
+            Review & Accept/Reject
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="sticky top-14 z-30 bg-charcoal-900/90 backdrop-blur-lg border-b border-charcoal-700/30">
@@ -194,6 +544,11 @@ export default function AdminDashboard() {
               >
                 <Icon size={16} />
                 {t.label}
+                {t.id === 'orders' && unhandledOrders.length > 0 && (
+                  <span className="bg-rust-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full inline-flex items-center justify-center min-w-[18px] leading-none">
+                    {unhandledOrders.length}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -201,12 +556,47 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        {tab === 'overview' && <OverviewTab addToast={addToast} />}
-        {tab === 'orders' && <OrdersTab addToast={addToast} />}
+        {tab === 'overview' && <OverviewTab addToast={addToast} unhandledCount={unhandledOrders.length} />}
+        {tab === 'orders' && (
+          <OrdersTab
+            addToast={addToast}
+            unhandledOrderIds={unhandledOrderIds}
+            onNewOrderDetected={triggerNewOrderAlert}
+            onOrderStatusChange={(orderId, status) => {
+              if (status === 'accepted' || status === 'rejected') {
+                handledOrderIdsRef.current.add(orderId);
+                activeAlertingOrderIdsRef.current.delete(orderId);
+                setUnhandledOrders((prev) => {
+                  if (!prev.some((o) => o.id === orderId)) return prev;
+                  const next = prev.filter((o) => o.id !== orderId);
+                  if (next.length === 0) {
+                    orderAlertPlayer.stopRinging();
+                    setIsAlertModalOpen(false);
+                  }
+                  return next;
+                });
+              }
+            }}
+          />
+        )}
         {tab === 'menu' && <MenuTab addToast={addToast} />}
         {tab === 'categories' && <CategoryTab addToast={addToast} />}
         {tab === 'analytics' && <AnalyticsTab />}
       </div>
+
+      {/* Real-time New Order Alert Modal */}
+      {isAlertModalOpen && unhandledOrders.length > 0 && (
+        <NewOrderAlertModal
+          orders={unhandledOrders}
+          currentIndex={currentAlertIndex}
+          onNext={() => setCurrentAlertIndex((i) => (i + 1) % unhandledOrders.length)}
+          onPrev={() => setCurrentAlertIndex((i) => (i - 1 + unhandledOrders.length) % unhandledOrders.length)}
+          onAccept={handleAlertAccept}
+          onReject={handleAlertReject}
+          onMinimize={() => setIsAlertModalOpen(false)}
+          actionLoadingId={alertActionLoadingId}
+        />
+      )}
     </div>
   );
 }
@@ -535,7 +925,7 @@ function AnalyticsTab() {
 }
 
 // =============== OVERVIEW ===============
-function OverviewTab({ addToast }: { addToast?: (m: string) => void }) {
+function OverviewTab({ addToast, unhandledCount = 0 }: { addToast?: (m: string) => void; unhandledCount?: number }) {
   const [stats, setStats] = useState({
     totalOrders: 0,
     pendingOrders: 0,
@@ -576,7 +966,7 @@ function OverviewTab({ addToast }: { addToast?: (m: string) => void }) {
       setLoading(false);
     };
     fetchStats();
-  }, []);
+  }, [unhandledCount]);
 
   if (loading) {
     return (
@@ -640,7 +1030,17 @@ function OverviewTab({ addToast }: { addToast?: (m: string) => void }) {
 }
 
 // =============== ORDERS ===============
-function OrdersTab({ addToast }: { addToast: (m: string) => void }) {
+function OrdersTab({
+  addToast,
+  unhandledOrderIds,
+  onOrderStatusChange,
+  onNewOrderDetected,
+}: {
+  addToast: (m: string) => void;
+  unhandledOrderIds?: Set<string>;
+  onOrderStatusChange?: (orderId: string, status: OrderStatus) => void;
+  onNewOrderDetected?: (order: Order) => void;
+}) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
@@ -651,8 +1051,16 @@ function OrdersTab({ addToast }: { addToast: (m: string) => void }) {
   const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-  const fetchOrders = useCallback(async () => {
+  const onNewOrderDetectedRef = useRef(onNewOrderDetected);
+  onNewOrderDetectedRef.current = onNewOrderDetected;
+  const addToastRef = useRef(addToast);
+  addToastRef.current = addToast;
+
+  const fetchOrders = useCallback(async (isInitial = false) => {
     setError(null);
+    if (isInitial) {
+      setLoading(true);
+    }
     let query = supabase
       .from('orders')
       .select('*, order_items(*)')
@@ -665,26 +1073,39 @@ function OrdersTab({ addToast }: { addToast: (m: string) => void }) {
     if (error) {
       setError(error.message || 'Failed to fetch orders');
     }
-    if (data) setOrders(data as Order[]);
+    if (data) {
+      setOrders(data as Order[]);
+    }
     setLoading(false);
   }, [filter]);
 
   useEffect(() => {
-    setLoading(true);
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 10000);
+    fetchOrders(true);
+    const interval = setInterval(() => fetchOrders(false), 10000);
     // subscribe to new orders via realtime
     const channel = supabase.channel('orders_list_channel');
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload: any) => {
-      const newRow = payload.new as Order | undefined;
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, async (payload: { new?: Order }) => {
+      const newRow = payload.new;
       if (newRow) {
-        addToast(`New order ${newRow.order_number}`);
+        addToastRef.current(`New order ${newRow.order_number}`);
         setOrders((prev) => (prev.find((o) => o.id === newRow.id) ? prev : [newRow as Order, ...prev]));
+        if (newRow.status === 'pending' && onNewOrderDetectedRef.current) {
+          try {
+            const { data: fullOrder } = await supabase
+              .from('orders')
+              .select('*, order_items(*)')
+              .eq('id', newRow.id)
+              .maybeSingle();
+            onNewOrderDetectedRef.current((fullOrder as Order) || newRow);
+          } catch {
+            onNewOrderDetectedRef.current(newRow);
+          }
+        }
       }
     });
     // listen for updates to keep status in sync
-    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload: any) => {
-      const newRow = payload.new as Partial<Order> | undefined;
+    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload: { new?: Partial<Order> }) => {
+      const newRow = payload.new;
       if (newRow?.id) {
         setOrders((prev) => prev.map((o) => (o.id === newRow.id ? { ...o, ...(newRow as Order) } : o)));
       }
@@ -692,7 +1113,7 @@ function OrdersTab({ addToast }: { addToast: (m: string) => void }) {
     channel.subscribe();
     return () => {
       clearInterval(interval);
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [fetchOrders]);
 
@@ -706,6 +1127,12 @@ function OrdersTab({ addToast }: { addToast: (m: string) => void }) {
     setUpdatingIds((m) => ({ ...m, [orderId]: true }));
     const prev = orders;
     setOrders((prevList) => prevList.map((o) => (o.id === orderId ? { ...o, status } : o)));
+
+    // Notify parent to stop ringing if accepted or rejected
+    if (status === 'accepted' || status === 'rejected') {
+      onOrderStatusChange?.(orderId, status);
+    }
+
     try {
       const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
       if (error) throw error;
@@ -814,6 +1241,7 @@ function OrdersTab({ addToast }: { addToast: (m: string) => void }) {
               onStatusChange={updateStatus}
               onView={() => setSelectedOrder(order)}
               disabled={!!updatingIds[order.id]}
+              isUnhandled={unhandledOrderIds?.has(order.id)}
             />
           ))}
         </div>
@@ -832,11 +1260,13 @@ function OrderCard({
   onStatusChange,
   onView,
   disabled = false,
+  isUnhandled = false,
 }: {
   order: Order;
   onStatusChange: (id: string, status: OrderStatus) => void;
   onView: () => void;
   disabled?: boolean;
+  isUnhandled?: boolean;
 }) {
   const itemCount = order.order_items?.reduce((sum, oi) => sum + oi.quantity, 0) ?? 0;
   const time = new Date(order.created_at).toLocaleTimeString('en-IN', {
@@ -847,11 +1277,22 @@ function OrderCard({
   const nextStatus = STATUS_FLOW[STATUS_FLOW.indexOf(order.status) + 1];
 
   return (
-    <div className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/30">
+    <div
+      className={`bg-charcoal-800 rounded-2xl p-4 border transition-all duration-200 ${
+        isUnhandled
+          ? 'border-gold-400/80 shadow-lg shadow-gold-500/10 ring-1 ring-gold-400/40'
+          : 'border-charcoal-700/30'
+      }`}
+    >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="font-heading font-bold text-cream-50 text-base">{order.order_number}</span>
+            {isUnhandled && (
+              <span className="bg-rust-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
+                <BellRing size={10} /> NEW
+              </span>
+            )}
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[order.status]}`}>
               {ORDER_STATUS_LABELS[order.status]}
             </span>
@@ -1271,18 +1712,82 @@ function MenuItemForm({
   const [name, setName] = useState(item?.name ?? '');
   const [description, setDescription] = useState(item?.description ?? '');
   const [price, setPrice] = useState(item ? String(item.price) : '');
-  const [imageUrl, setImageUrl] = useState(item?.image_url ?? '');
   const [categoryId, setCategoryId] = useState(item?.category_id ?? (categories[0]?.id ?? ''));
   const [isPopular, setIsPopular] = useState(item?.is_popular ?? false);
   const [isAvailable, setIsAvailable] = useState(item?.is_available ?? true);
   const [displayOrder, setDisplayOrder] = useState(item ? String(item.display_order ?? 0) : '0');
+
+  // Manual image upload state
+  const [previewUrl, setPreviewUrl] = useState<string | null>(item?.image_url || null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [saving, setSaving] = useState(false);
+  const [savingStatus, setSavingStatus] = useState('Saving...');
   const [error, setError] = useState('');
+
+  // Clean up object URLs on unmount or URL change
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageError(null);
+
+    // Validate MIME type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.type)) {
+      setImageError('Only JPEG, PNG, WebP, and GIF images are supported.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setImageError('Image size must be less than 5MB.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    setSelectedFile(file);
+    setImageRemoved(false);
+  };
+
+  const handleRemoveImage = () => {
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setImageRemoved(true);
+    setImageError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setSavingStatus('Saving...');
     setError('');
+
     // validation
     const parsedPrice = parseFloat(price);
     if (!name.trim()) {
@@ -1296,18 +1801,57 @@ function MenuItemForm({
       return;
     }
 
-    const payload = {
-      name: name.trim(),
-      description: description.trim() || null,
-      price: parsedPrice,
-      image_url: imageUrl.trim() || null,
-      category_id: categoryId || null,
-      is_popular: isPopular,
-      is_available: isAvailable,
-      display_order: parseInt(displayOrder) || 0,
-    };
-
     try {
+      let finalImageUrl: string | null = item?.image_url ?? null;
+
+      if (selectedFile) {
+        setSavingStatus('Uploading image...');
+        const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const sanitizedExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(fileExt) ? fileExt : 'jpg';
+        const fileName = `item_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${sanitizedExt}`;
+        const filePath = `menu-items/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('menu-images')
+          .upload(filePath, selectedFile, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(
+            uploadError.message.includes('row-level security') || uploadError.message.includes('policy')
+              ? "Storage permission denied. Ensure your user has app_metadata.role = 'admin' and you have logged in recently."
+              : `Image upload failed: ${uploadError.message}`
+          );
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('menu-images')
+          .getPublicUrl(filePath);
+
+        if (!urlData?.publicUrl) {
+          throw new Error('Failed to retrieve public image URL after upload.');
+        }
+
+        finalImageUrl = urlData.publicUrl;
+      } else if (imageRemoved) {
+        finalImageUrl = null;
+      }
+
+      setSavingStatus('Saving menu item...');
+
+      const payload = {
+        name: name.trim(),
+        description: description.trim() || null,
+        price: parsedPrice,
+        image_url: finalImageUrl,
+        category_id: categoryId || null,
+        is_popular: isPopular,
+        is_available: isAvailable,
+        display_order: parseInt(displayOrder) || 0,
+      };
+
       if (item) {
         const { error: err } = await supabase.from('menu_items').update(payload).eq('id', item.id);
         if (err) throw err;
@@ -1398,15 +1942,85 @@ function MenuItemForm({
             </select>
           </div>
 
+          {/* Food Image Upload & Preview */}
           <div>
-            <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Image URL</label>
+            <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Food Image</label>
             <input
-              type="url"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://..."
-              className="w-full bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-sm rounded-xl px-4 py-3 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleFileChange}
+              className="hidden"
             />
+
+            {previewUrl ? (
+              <div className="space-y-3">
+                <div className="relative rounded-2xl overflow-hidden bg-charcoal-900 border border-charcoal-700/50 aspect-video max-h-52 flex items-center justify-center">
+                  <img
+                    src={previewUrl}
+                    alt={name || 'Food preview'}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      target.src = 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&auto=format&fit=crop&q=80';
+                    }}
+                  />
+                  {selectedFile && (
+                    <span className="absolute top-2 right-2 bg-cream-400 text-charcoal-900 text-xs font-bold px-2.5 py-1 rounded-full shadow">
+                      New Image Selected
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-2 bg-charcoal-700 hover:bg-charcoal-600 text-cream-100 text-sm font-medium py-2.5 px-4 rounded-xl transition-colors border border-charcoal-600/50"
+                  >
+                    <RefreshCw size={15} />
+                    Change Image
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    className="flex items-center justify-center gap-2 bg-rust-500/15 hover:bg-rust-500/25 text-rust-300 text-sm font-medium py-2.5 px-4 rounded-xl transition-colors border border-rust-500/30"
+                  >
+                    <Trash2 size={15} />
+                    Remove Image
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="group border-2 border-dashed border-charcoal-700 hover:border-cream-400/60 rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 bg-charcoal-900/40 hover:bg-charcoal-900/70"
+              >
+                <div className="w-12 h-12 rounded-xl bg-charcoal-800 group-hover:bg-cream-400/10 text-charcoal-400 group-hover:text-cream-400 flex items-center justify-center mx-auto mb-3 transition-colors">
+                  <Upload size={22} />
+                </div>
+                <p className="text-sm font-semibold text-cream-200 mb-1">Click to upload food image</p>
+                <p className="text-xs text-charcoal-400 mb-3">JPEG, PNG, WebP or GIF (max 5MB)</p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="inline-flex items-center gap-2 bg-charcoal-700 hover:bg-charcoal-600 text-cream-200 text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Upload size={14} />
+                  Upload Image
+                </button>
+              </div>
+            )}
+
+            {imageError && (
+              <p className="text-rust-400 text-xs mt-2 flex items-center gap-1">
+                <AlertCircle size={13} className="flex-shrink-0" />
+                {imageError}
+              </p>
+            )}
           </div>
 
           <div className="flex gap-4">
@@ -1452,7 +2066,7 @@ function MenuItemForm({
               {saving ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Saving...
+                  {savingStatus}
                 </>
               ) : (
                 'Save'

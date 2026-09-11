@@ -38,11 +38,20 @@ function makeMissingEnvProxy(): any {
     signOut: async () => ({ data: null, error: new Error(message) }),
   };
 
+  const storage = {
+    from: () => ({
+      upload: async () => ({ data: null, error: new Error(message) }),
+      getPublicUrl: () => ({ data: { publicUrl: '' } }),
+      remove: async () => ({ data: null, error: new Error(message) }),
+    }),
+  };
+
   return new Proxy(
     {
       from: (_: string) => tableHandler(),
       rpc: () => Promise.resolve(noopResponse(null)),
       auth,
+      storage,
     },
     {
       get(target, prop) {
