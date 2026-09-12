@@ -2,6 +2,7 @@ import { useCart } from '@/lib/cart-context';
 import QuantitySelector from '@/components/QuantitySelector';
 import type { PageId } from '@/components/BottomNav';
 import { Trash2, ShoppingBag, ArrowRight, X } from 'lucide-react';
+import { getOptimizedImageUrl } from '@/lib/image-utils';
 
 interface CartPageProps {
   onNavigate: (page: PageId) => void;
@@ -35,7 +36,7 @@ export default function CartPage({ onNavigate }: CartPageProps) {
   }
 
   return (
-    <div className="animate-fade-in pb-28 md:pb-12">
+    <div className="animate-fade-in pb-28 md:pb-12 touch-pan-y">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -62,12 +63,15 @@ export default function CartPage({ onNavigate }: CartPageProps) {
               className="bg-charcoal-800 rounded-2xl p-3 flex gap-3 border border-charcoal-700/30 animate-slide-up"
             >
               {/* Image */}
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden flex-shrink-0 img-shimmer">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden flex-shrink-0 bg-charcoal-700">
                 {cartItem.menuItem.image_url && (
                   <img
-                    src={cartItem.menuItem.image_url}
+                    src={getOptimizedImageUrl(cartItem.menuItem.image_url, 200)}
                     alt={cartItem.menuItem.name}
-                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                    draggable={false}
+                    className="w-full h-full object-cover pointer-events-none select-none"
                   />
                 )}
               </div>

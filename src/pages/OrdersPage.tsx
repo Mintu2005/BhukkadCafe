@@ -97,7 +97,7 @@ export default function OrdersPage({ onNavigate, onTrackOrder, trackOrder }: Ord
     : orders;
 
   return (
-    <div className="animate-fade-in pb-28 md:pb-12">
+    <div className="animate-fade-in pb-28 md:pb-12 touch-pan-y">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-4">
         <h1 className="font-heading font-bold text-2xl sm:text-3xl text-cream-50 mb-1">Your Orders</h1>
         <p className="text-charcoal-400 text-sm mb-4">Track and view all your orders</p>
@@ -215,14 +215,19 @@ export default function OrdersPage({ onNavigate, onTrackOrder, trackOrder }: Ord
 
 function TrackOrderView({ order, onBack }: { order: Order; onBack: () => void }) {
   const [currentOrder, setCurrentOrder] = useState(order);
+  const orderId = order?.id;
+  const viewToken = (order as any)?.view_token;
 
   useEffect(() => {
     setCurrentOrder(order);
+  }, [order]);
+
+  useEffect(() => {
     const poll = async () => {
       try {
-        const viewToken = (order as any).view_token || sessionStorage.getItem('last_view_token');
-        if (!viewToken) return;
-        const { data, error } = await supabase.rpc('get_order_by_token', { p_view_token: viewToken });
+        const token = viewToken || sessionStorage.getItem('last_view_token');
+        if (!token) return;
+        const { data, error } = await supabase.rpc('get_order_by_token', { p_view_token: token });
         if (error) return;
         const resp = Array.isArray(data) ? data[0] : data;
         if (!resp) return;
@@ -256,10 +261,10 @@ function TrackOrderView({ order, onBack }: { order: Order; onBack: () => void })
         // ignore
       }
     };
-    const interval = setInterval(poll, 5000);
     poll();
+    const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
-  }, [order]);
+  }, [orderId, viewToken]);
 
   return (
     <div className="animate-fade-in pb-28 md:pb-12">

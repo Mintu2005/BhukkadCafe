@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { fetchCategories, fetchPopularItems, fetchCategoryImages } from '@/lib/menu-service';
+import { getOptimizedImageUrl } from '@/lib/image-utils';
 import type { MenuItem, Category } from '@/lib/types';
 import FoodCard from '@/components/FoodCard';
 import type { PageId } from '@/components/BottomNav';
@@ -17,79 +18,36 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const [popularRes, catRes] = await Promise.all([
-        supabase
-          .from('menu_items')
-          .select('*, category:categories(*)')
-          .eq('is_popular', true)
-          .eq('is_available', true)
-          .order('display_order')
-          .limit(6),
-        supabase
-          .from('categories')
-          .select('*')
-          .order('display_order'),
-      ]);
-      let popular = (popularRes.data ?? []) as MenuItem[];
-      // if no explicit popular items, fallback to available items so the section isn't empty
-      if (!popular || popular.length === 0) {
-        try {
-          const fallback = await supabase
-            .from('menu_items')
-            .select('*, category:categories(*)')
-            .eq('is_available', true)
-            .order('display_order')
-            .limit(6);
-          popular = (fallback.data ?? []) as MenuItem[];
-        } catch {
-          popular = [];
+    let mounted = true;
+    const loadData = async () => {
+      try {
+        const [popular, cats] = await Promise.all([
+          fetchPopularItems(),
+          fetchCategories(),
+        ]);
+        if (!mounted) return;
+        setPopularItems(popular);
+        setCategories(cats);
+        setLoading(false);
+
+        if (cats.length > 0) {
+          const imgMap = await fetchCategoryImages(cats);
+          if (mounted) {
+            setCategoryImages(imgMap);
+          }
         }
+      } catch {
+        if (mounted) setLoading(false);
       }
-      setPopularItems(popular);
-      setCategories(catRes.data ?? []);
-      setLoading(false);
     };
-    fetchData();
+    loadData();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // Fetch one image per category from menu_items as a graceful fallback
-  useEffect(() => {
-    if (categories.length === 0) return;
-    const fetchCatImages = async () => {
-      try {
-        const imgMap: Record<string, string> = {};
-        await Promise.all(
-          categories.map(async (cat) => {
-            try {
-              const res = await supabase
-                .from('menu_items')
-                .select('image_url')
-                .eq('category_id', cat.id)
-                .eq('is_available', true)
-                .not('image_url', 'is', null)
-                .order('display_order')
-                .limit(1);
-              const rows = res.data as Array<{ image_url?: string }> | null;
-              const url = rows && rows[0]?.image_url ? String(rows[0].image_url).trim() : '';
-              if (url && (url.startsWith('http') || url.startsWith('/'))) {
-                imgMap[String(cat.id)] = url;
-              }
-            } catch {
-              // ignore per-category errors
-            }
-          })
-        );
-        setCategoryImages(imgMap);
-      } catch {
-        // ignore
-      }
-    };
-    fetchCatImages();
-  }, [categories.length]);
-
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in touch-pan-y">
       {/* Hero Section */}
       <section className="relative min-h-[75vh] flex items-center justify-center overflow-hidden hero-warm">
         {/* Background image */}
@@ -188,7 +146,7 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
             <ArrowRight size={15} />
           </button>
         </div>
-        <div className="flex gap-2.5 sm:gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
+        <div className="flex gap-2.5 sm:gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 touch-pan-x">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex-shrink-0 w-20 h-28 bg-charcoal-800 rounded-2xl img-shimmer" />
@@ -201,7 +159,14 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
                 >
                   <div className="w-24 h-18 sm:w-32 sm:h-24 rounded-2xl bg-charcoal-800 border border-charcoal-700/50 overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-300 shadow-lg">
                     {categoryImages[cat.id] ? (
-                      <img src={categoryImages[cat.id]} alt={cat.name} className="w-full h-full object-cover" />
+                      <img
+                        src={getOptimizedImageUrl(categoryImages[cat.id], 300)}
+                        alt={cat.name}
+                        loading="lazy"
+                        decoding="async"
+                        draggable={false}
+                        className="w-full h-full object-cover pointer-events-none select-none"
+                      />
                     ) : (
                       <div className="text-2xl sm:text-3xl">{cat.icon}</div>
                     )}

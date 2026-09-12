@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { fetchMenuItems, fetchCategories } from '@/lib/menu-service';
+import { useCart } from '@/lib/cart-context';
 import type { MenuItem, Category } from '@/lib/types';
 import FoodCard from '@/components/FoodCard';
 import { Search, X, ArrowUpDown } from 'lucide-react';
@@ -12,6 +13,7 @@ interface MenuPageProps {
 type SortOption = 'default' | 'price-low' | 'price-high' | 'popular';
 
 export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProps) {
+  const { getQuantity } = useCart();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,22 +23,28 @@ export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProp
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     const fetchData = async () => {
-      const [itemsRes, catRes] = await Promise.all([
-        supabase
-          .from('menu_items')
-          .select('*, category:categories(*)')
-          .order('display_order'),
-        supabase
-          .from('categories')
-          .select('*')
-          .order('display_order'),
-      ]);
-      setItems(itemsRes.data ?? []);
-      setCategories(catRes.data ?? []);
-      setLoading(false);
+      try {
+        const [itemsData, catData] = await Promise.all([
+          fetchMenuItems(),
+          fetchCategories(),
+        ]);
+        if (mounted) {
+          setItems(itemsData);
+          setCategories(catData);
+          setLoading(false);
+        }
+      } catch {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     };
     fetchData();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -99,7 +107,7 @@ export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProp
     selectedCategory !== 'all' || sortBy !== 'default' || searchQuery.trim() !== '';
 
   return (
-    <div className="animate-fade-in pb-28 md:pb-12">
+    <div className="animate-fade-in pb-28 md:pb-12 touch-pan-y">
       {/* Header */}
       <div className="bg-charcoal-900 sticky top-0 z-30 border-b border-charcoal-700/30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 pb-3">
@@ -126,7 +134,7 @@ export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProp
           </div>
 
           {/* Category chips - horizontal scroll */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:-mx-6 sm:px-6 pb-1">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:-mx-6 sm:px-6 pb-1 touch-pan-x">
             <button
               onClick={() => handleCategoryChange('all')}
               className={`flex-shrink-0 px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
@@ -240,9 +248,14 @@ export default function MenuPage({ onItemSelect, initialCategory }: MenuPageProp
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 touch-pan-y">
             {filteredItems.map((item) => (
-              <FoodCard key={item.id} item={item} onClick={() => onItemSelect(item)} />
+              <FoodCard
+                key={item.id}
+                item={item}
+                quantity={getQuantity(item.id)}
+                onClick={() => onItemSelect(item)}
+              />
             ))}
           </div>
         )}

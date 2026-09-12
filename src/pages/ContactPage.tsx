@@ -3,7 +3,7 @@ import { MapPin, Phone, Clock, Mail, Instagram, Facebook, MessageCircle, Utensil
 
 export default function ContactPage() {
   return (
-    <div className="animate-fade-in pb-28 md:pb-12">
+    <div className="animate-fade-in pb-28 md:pb-12 touch-pan-y">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-4">
         <h1 className="font-heading font-bold text-2xl sm:text-3xl text-cream-50 mb-1">Get in Touch</h1>
         <p className="text-charcoal-400 text-sm mb-6">We'd love to hear from you</p>

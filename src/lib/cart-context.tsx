@@ -3,6 +3,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useMemo,
   useEffect,
   type ReactNode,
 } from 'react';
@@ -73,38 +74,55 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => setItems([]), []);
 
+  const quantityMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (let i = 0; i < items.length; i++) {
+      map[items[i].menuItem.id] = items[i].quantity;
+    }
+    return map;
+  }, [items]);
+
   const getQuantity = useCallback(
-    (menuItemId: string) =>
-      items.find((i) => i.menuItem.id === menuItemId)?.quantity ?? 0,
-    [items]
+    (menuItemId: string) => quantityMap[menuItemId] ?? 0,
+    [quantityMap]
   );
 
-  const getTotalItems = useCallback(
+  const totalItems = useMemo(
     () => items.reduce((sum, i) => sum + i.quantity, 0),
     [items]
   );
+  const getTotalItems = useCallback(() => totalItems, [totalItems]);
 
-  const getSubtotal = useCallback(
+  const subtotal = useMemo(
     () => items.reduce((sum, i) => sum + i.menuItem.price * i.quantity, 0),
     [items]
   );
+  const getSubtotal = useCallback(() => subtotal, [subtotal]);
 
-  return (
-    <CartContext.Provider
-      value={{
-        items,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
-        getQuantity,
-        getTotalItems,
-        getSubtotal,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
+  const value = useMemo(
+    () => ({
+      items,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      clearCart,
+      getQuantity,
+      getTotalItems,
+      getSubtotal,
+    }),
+    [
+      items,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      clearCart,
+      getQuantity,
+      getTotalItems,
+      getSubtotal,
+    ]
   );
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export function useCart() {

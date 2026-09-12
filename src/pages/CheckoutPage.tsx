@@ -100,7 +100,7 @@ export default function CheckoutPage({ onNavigate, onOrderPlaced }: CheckoutPage
   };
 
   return (
-    <div className="animate-fade-in pb-28 md:pb-12">
+    <div className="animate-fade-in pb-28 md:pb-12 touch-pan-y">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-4">
         {/* Back button */}
         <button

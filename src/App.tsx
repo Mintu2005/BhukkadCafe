@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, lazy, Suspense } from 'react';
 import { CartProvider } from '@/lib/cart-context';
 import type { MenuItem, Order } from '@/lib/types';
 import TopNav from '@/components/TopNav';
@@ -11,7 +11,8 @@ import CheckoutPage from '@/pages/CheckoutPage';
 import OrderConfirmationPage from '@/pages/OrderConfirmationPage';
 import OrdersPage from '@/pages/OrdersPage';
 import ContactPage from '@/pages/ContactPage';
-import AdminDashboard from '@/pages/AdminDashboard';
+
+const AdminDashboard = lazy(() => import('@/pages/AdminDashboard'));
 
 type AppView = 'customer' | 'admin';
 
@@ -61,7 +62,17 @@ function App() {
 
   // Admin view
   if (view === 'admin') {
-    return <AdminDashboard />;
+    return (
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-charcoal-950 flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-cream-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <AdminDashboard />
+      </Suspense>
+    );
   }
 
   const isCheckout = page === 'checkout';
@@ -72,10 +83,10 @@ function App() {
 
   return (
     <CartProvider>
-      <div className="min-h-screen bg-charcoal-900 w-full max-w-full overflow-x-hidden relative">
+      <div className="min-h-screen bg-charcoal-900 w-full relative">
         <TopNav currentPage={navPage} onNavigate={handleNavigate} />
 
-        <main className="w-full max-w-full overflow-x-hidden">
+        <main className="w-full">
           {page === 'home' && (
             <HomePage onNavigate={handleNavigate} onItemSelect={handleItemSelect} />
           )}

@@ -3,6 +3,7 @@ import { useCart } from '@/lib/cart-context';
 import type { MenuItem } from '@/lib/types';
 import QuantitySelector from '@/components/QuantitySelector';
 import { X, Star, Plus, ArrowLeft } from 'lucide-react';
+import { getOptimizedImageUrl, DEFAULT_FOOD_IMAGE } from '@/lib/image-utils';
 
 interface FoodDetailModalProps {
   item: MenuItem | null;
@@ -13,10 +14,12 @@ interface FoodDetailModalProps {
 export default function FoodDetailModal({ item, onClose, onGoToCart }: FoodDetailModalProps) {
   const { addToCart, getQuantity, updateQuantity } = useCart();
   const [localQty, setLocalQty] = useState(1);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   useEffect(() => {
     setLocalQty(item ? getQuantity(item.id) || 1 : 1);
-  }, [item]);
+    setImageLoaded(false);
+  }, [item, getQuantity]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -72,16 +75,23 @@ export default function FoodDetailModal({ item, onClose, onGoToCart }: FoodDetai
         </button>
 
         {/* Image */}
-        <div className="relative aspect-video sm:aspect-[4/3] max-h-52 sm:max-h-72 overflow-hidden rounded-t-3xl img-shimmer">
+        <div className={`relative aspect-video sm:aspect-[4/3] max-h-52 sm:max-h-72 overflow-hidden rounded-t-3xl ${!imageLoaded ? 'img-shimmer' : 'bg-charcoal-900'}`}>
           <img
-            src={item.image_url || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&auto=format&fit=crop&q=80'}
+            src={getOptimizedImageUrl(item.image_url, 800)}
             alt={item.name}
-            className="w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+            onLoad={() => setImageLoaded(true)}
             onError={(e) => {
               const t = e.currentTarget as HTMLImageElement;
               t.onerror = null;
-              t.src = 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&auto=format&fit=crop&q=80';
+              t.src = DEFAULT_FOOD_IMAGE;
+              setImageLoaded(true);
             }}
+            className={`w-full h-full object-cover pointer-events-none select-none ${
+              imageLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
           />
           {item.is_popular && (
             <div className="absolute top-3 left-14 sm:left-4 flex items-center gap-1 bg-rust-500 text-white text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-lg">

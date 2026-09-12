@@ -1,48 +1,59 @@
+import { useState, memo } from 'react';
 import { useCart } from '@/lib/cart-context';
 import type { MenuItem } from '@/lib/types';
 import QuantitySelector from './QuantitySelector';
 import { Plus, Star } from 'lucide-react';
+import { getOptimizedImageUrl, DEFAULT_FOOD_IMAGE } from '@/lib/image-utils';
 
 interface FoodCardProps {
   item: MenuItem;
   onClick: () => void;
+  quantity?: number;
 }
 
-export default function FoodCard({ item, onClick }: FoodCardProps) {
+function FoodCardInner({ item, onClick, quantity: propQuantity }: FoodCardProps) {
   const { addToCart, getQuantity, updateQuantity } = useCart();
-  const quantity = getQuantity(item.id);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const quantity = propQuantity !== undefined ? propQuantity : getQuantity(item.id);
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
     addToCart(item, 1);
   };
 
+  const optimizedSrc = getOptimizedImageUrl(item.image_url, 400);
+
   return (
     <div
       onClick={onClick}
-      className="group bg-charcoal-800 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:shadow-black/40 hover:-translate-y-1 border border-charcoal-700/50"
+      className="group bg-charcoal-800 rounded-2xl overflow-hidden cursor-pointer transition-transform transition-shadow duration-200 hover:shadow-2xl hover:shadow-black/40 hover:-translate-y-1 border border-charcoal-700/50 touch-pan-y"
     >
-      <div className="relative aspect-square overflow-hidden img-shimmer">
+      <div className={`relative aspect-square overflow-hidden ${!imageLoaded ? 'img-shimmer' : 'bg-charcoal-900'}`}>
         <img
-          src={item.image_url || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&auto=format&fit=crop&q=80'}
+          src={optimizedSrc}
           alt={item.name}
           loading="lazy"
+          decoding="async"
+          draggable={false}
+          onLoad={() => setImageLoaded(true)}
           onError={(e) => {
             const target = e.currentTarget as HTMLImageElement;
             target.onerror = null;
-            target.src = 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&auto=format&fit=crop&q=80';
-            target.className = 'w-full h-full object-cover';
+            target.src = DEFAULT_FOOD_IMAGE;
+            setImageLoaded(true);
           }}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 pointer-events-none select-none ${
+            imageLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
         />
         {item.is_popular && (
-          <div className="absolute top-2 left-2 flex items-center gap-1 bg-rust-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg">
+          <div className="absolute top-2 left-2 flex items-center gap-1 bg-rust-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg pointer-events-none select-none">
             <Star size={10} className="fill-current" />
             POPULAR
           </div>
         )}
         {!item.is_available && (
-          <div className="absolute inset-0 bg-charcoal-900/70 flex items-center justify-center">
+          <div className="absolute inset-0 bg-charcoal-900/70 flex items-center justify-center pointer-events-none select-none">
             <span className="text-cream-300 font-heading font-semibold text-sm">Unavailable</span>
           </div>
         )}
@@ -87,3 +98,6 @@ export default function FoodCard({ item, onClick }: FoodCardProps) {
     </div>
   );
 }
+
+const FoodCard = memo(FoodCardInner);
+export default FoodCard;

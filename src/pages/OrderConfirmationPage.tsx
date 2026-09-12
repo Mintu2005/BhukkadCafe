@@ -85,7 +85,7 @@ export default function OrderConfirmationPage({ order, onNavigate, onTrackOrder 
   const currentStepIndex = ORDER_STATUS_STEPS.indexOf(status);
 
   return (
-    <div className="animate-fade-in pb-28 md:pb-12">
+    <div className="animate-fade-in pb-28 md:pb-12 touch-pan-y">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-4">
         {/* Success banner */}
         {!isRejected ? (
