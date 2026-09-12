@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Order, OrderStatus, MenuItem, Category, OrderItem } from '@/lib/types';
-import type { Session, AuthChangeEvent } from '@supabase/supabase-js';
+import type { Session, AuthChangeEvent, User } from '@supabase/supabase-js';
 import { ORDER_STATUS_LABELS } from '@/lib/types';
 import {
   LayoutDashboard,
@@ -45,6 +45,48 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   rejected: 'text-rust-400 bg-rust-400/10 border-rust-400/30',
 };
 
+async function verifyAdminUser(user: User | null | undefined): Promise<boolean> {
+  if (!user) return false;
+
+  // 1. Check app_metadata role (preserves existing admins configured via JWT/metadata)
+  const role = (user.app_metadata as Record<string, unknown> | undefined)?.role;
+  if (typeof role === 'string' && role.toLowerCase() === 'admin') {
+    return true;
+  }
+
+  // 2. Check public.admins table (by user_id or email)
+  try {
+    if (user.id) {
+      const { data, error } = await supabase
+        .from('admins')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        return true;
+      }
+    }
+
+    const email = user.email?.trim();
+    if (email) {
+      const { data, error } = await supabase
+        .from('admins')
+        .select('email')
+        .ilike('email', email)
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        return true;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to verify admin status from public.admins:', err);
+  }
+
+  return false;
+}
+
 export default function AdminDashboard() {
   const [view, setView] = useState<AdminView>('login');
   const [tab, setTab] = useState<AdminTab>('overview');
@@ -60,13 +102,13 @@ export default function AdminDashboard() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
   }, []);
 
-  const checkSessionRole = useCallback((session: Session | null) => {
-    if (!session) {
-      setView('login');
+  const checkSessionRole = useCallback(async (session: Session | null) => {
+    if (!session?.user) {
+      setView((prev) => (prev === 'unauthorized' ? 'unauthorized' : 'login'));
       return;
     }
-    const role = (session.user?.app_metadata as Record<string, unknown> | undefined)?.role;
-    if (role === 'admin') {
+    const isAdmin = await verifyAdminUser(session.user);
+    if (isAdmin) {
       setView('dashboard');
     } else {
       setView('unauthorized');
@@ -93,12 +135,17 @@ export default function AdminDashboard() {
     });
     if (error) {
       setLoginError(error.message);
-    } else if (data?.session) {
-      const role = (data.session.user?.app_metadata as Record<string, unknown> | undefined)?.role;
-      if (role !== 'admin') {
+      setLoginLoading(false);
+      return;
+    }
+    if (data?.session?.user) {
+      const isAdmin = await verifyAdminUser(data.session.user);
+      if (!isAdmin) {
         await supabase.auth.signOut();
         setView('unauthorized');
         setLoginError('Access denied: You do not have administrator privileges.');
+      } else {
+        setView('dashboard');
       }
     }
     setLoginLoading(false);
