@@ -30,14 +30,14 @@ export default function ContactPage() {
           </a>
 
           <a
-            href="mailto:m8426514@gmail.com"
+            href="mailto:bhukkadcafeofficial@gmail.com"
             className="bg-charcoal-800 rounded-2xl p-5 border border-charcoal-700/30 hover:border-cream-400/30 transition-all duration-200 group"
           >
             <div className="w-11 h-11 rounded-xl bg-cream-400/10 flex items-center justify-center mb-3 group-hover:bg-cream-400/20 transition-colors">
               <Mail size={22} className="text-cream-400" />
             </div>
             <h3 className="font-heading font-semibold text-cream-50 text-base mb-1">Email Us</h3>
-            <p className="text-charcoal-300 text-sm">m8426514@gmail.com</p>
+            <p className="text-charcoal-300 text-sm">bhukkadcafeofficial@gmail.com</p>
           </a>
         </div>
 
