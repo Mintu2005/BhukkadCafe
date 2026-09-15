@@ -114,3 +114,23 @@ export interface GetOrderByTokenResponse {
     line_total: number;
   }>;
 }
+
+export interface Offer {
+  id: string;
+  title: string;
+  description: string | null;
+  original_price: number | null;
+  offer_price: number;
+  discount_text: string | null;
+  image_url: string | null;
+  is_active: boolean;
+  is_today_special: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OfferSettings {
+  show_today_offers: boolean;
+}
+

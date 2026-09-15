@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { fetchCategories, fetchPopularItems, fetchCategoryImages } from '@/lib/menu-service';
+import { fetchTodayOffers, fetchTodayOffersSetting } from '@/lib/offers-service';
 import { getOptimizedImageUrl, DEFAULT_FOOD_IMAGE } from '@/lib/image-utils';
-import type { MenuItem, Category } from '@/lib/types';
+import type { MenuItem, Category, Offer } from '@/lib/types';
 import QuantitySelector from '@/components/QuantitySelector';
 import { useCart } from '@/lib/cart-context';
 import type { PageId } from '@/components/BottomNav';
-import { ArrowRight, MapPin, Phone, Clock, Star, Flame, Truck, Utensils, Sparkles, Plus } from 'lucide-react';
+import { ArrowRight, MapPin, Phone, Clock, Star, Flame, Truck, Utensils, Sparkles, Plus, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface HomePageProps {
   onNavigate: (page: PageId, params?: Record<string, unknown>) => void;
@@ -170,19 +171,28 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
   const [popularItems, setPopularItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryImages, setCategoryImages] = useState<Record<string, string>>({});
+  const [todayOffers, setTodayOffers] = useState<Offer[]>([]);
+  const [showTodayOffers, setShowTodayOffers] = useState(true);
+  const [offersLoading, setOffersLoading] = useState(true);
+  const [activeOfferIndex, setActiveOfferIndex] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     const loadData = async () => {
       try {
-        const [popular, cats] = await Promise.all([
+        const [popular, cats, offers, isOffersEnabled] = await Promise.all([
           fetchPopularItems(),
           fetchCategories(),
+          fetchTodayOffers(),
+          fetchTodayOffersSetting(),
         ]);
         if (!mounted) return;
         setPopularItems(popular);
         setCategories(cats);
+        setTodayOffers(offers);
+        setShowTodayOffers(isOffersEnabled);
+        setOffersLoading(false);
         setLoading(false);
 
         if (cats.length > 0) {
@@ -192,7 +202,10 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
           }
         }
       } catch {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setOffersLoading(false);
+          setLoading(false);
+        }
       }
     };
     loadData();
@@ -200,6 +213,15 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
       mounted = false;
     };
   }, []);
+
+  // Auto-advance carousel for multiple today offers
+  useEffect(() => {
+    if (!showTodayOffers || todayOffers.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveOfferIndex((prev) => (prev + 1) % todayOffers.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [showTodayOffers, todayOffers.length]);
 
   return (
     <div className="animate-fade-in touch-pan-y">
@@ -270,23 +292,198 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
         </div>
       </section>
 
-      {/* Special Offers Banner */}
+      {/* Special Offers Section */}
       <section className="px-4 sm:px-6 mt-6 sm:mt-8 relative z-10 max-w-6xl mx-auto w-full">
-        <div className="bg-gradient-to-r from-rust-600 to-rust-500 rounded-2xl p-3.5 sm:p-5 flex flex-col sm:flex-row items-center gap-3 sm:gap-4 shadow-xl text-center sm:text-left">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-cream-400 flex items-center justify-center flex-shrink-0">
-            <Flame size={22} className="text-rust-600" />
+        {offersLoading ? (
+          <div className="bg-charcoal-800/80 border border-charcoal-700/40 rounded-2xl p-4 sm:p-5 flex items-center gap-4 img-shimmer">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-charcoal-700 flex-shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-charcoal-700 rounded w-1/3" />
+              <div className="h-3 bg-charcoal-700 rounded w-2/3" />
+            </div>
+            <div className="w-24 h-9 bg-charcoal-700 rounded-full flex-shrink-0 hidden sm:block" />
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-heading font-bold text-cream-50 text-sm sm:text-base">Today's Special</h3>
-            <p className="text-cream-100/90 text-xs sm:text-sm">Free Oreo Shake with any order above &#8377;300</p>
+        ) : !showTodayOffers || todayOffers.length === 0 ? (
+          /* Clean No Offers Today State */
+          <div className="bg-gradient-to-r from-charcoal-850 via-charcoal-800 to-charcoal-850 border border-charcoal-700/60 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 shadow-lg text-center sm:text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-cream-400/10 border border-cream-400/20 flex items-center justify-center flex-shrink-0">
+                <Sparkles size={20} className="text-cream-300" />
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-cream-50 text-sm sm:text-base">No Special Offers Today</h3>
+                <p className="text-charcoal-300 text-xs sm:text-sm">Explore our full menu for our complete range of delicious cafe favorites!</p>
+              </div>
+            </div>
+            <button
+              onClick={() => onNavigate('menu')}
+              className="w-full sm:w-auto bg-cream-400 hover:bg-cream-300 text-charcoal-900 font-heading font-bold text-xs sm:text-sm px-4 py-2 rounded-full transition-colors flex items-center justify-center gap-1.5 flex-shrink-0 shadow-sm"
+            >
+              <span>Explore Menu</span>
+              <ArrowRight size={14} />
+            </button>
           </div>
-          <button
-            onClick={() => onNavigate('menu')}
-            className="w-full sm:w-auto bg-cream-50 text-rust-600 font-bold text-xs sm:text-sm px-4 py-2 rounded-full hover:bg-cream-100 transition-colors flex-shrink-0"
-          >
-            Grab Now
-          </button>
-        </div>
+        ) : (
+          /* Active Today's Special Offers */
+          <div className="relative">
+            {todayOffers.length === 1 ? (
+              /* Single Offer */
+              <div className="bg-gradient-to-r from-rust-600 via-rust-500 to-rust-600 rounded-2xl p-3.5 sm:p-5 shadow-xl border border-rust-400/30 overflow-hidden">
+                <div className="flex flex-col sm:flex-row items-center gap-3.5 sm:gap-5 text-center sm:text-left">
+                  {todayOffers[0].image_url ? (
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-charcoal-900 flex-shrink-0 shadow-md border border-cream-400/20">
+                      <img
+                        src={getOptimizedImageUrl(todayOffers[0].image_url, 300)}
+                        alt={todayOffers[0].title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-cream-400 flex items-center justify-center flex-shrink-0 shadow-md">
+                      <Flame size={24} className="text-rust-600" />
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-1">
+                      <span className="bg-cream-400 text-charcoal-900 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        Today's Special
+                      </span>
+                      {todayOffers[0].discount_text && (
+                        <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full border border-white/30">
+                          {todayOffers[0].discount_text}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-heading font-bold text-cream-50 text-base sm:text-lg leading-snug">
+                      {todayOffers[0].title}
+                    </h3>
+                    {todayOffers[0].description && (
+                      <p className="text-cream-100/90 text-xs sm:text-sm mt-0.5 line-clamp-2">
+                        {todayOffers[0].description}
+                      </p>
+                    )}
+                    <div className="flex items-baseline justify-center sm:justify-start gap-2 mt-2">
+                      <span className="text-cream-300 font-heading font-bold text-base sm:text-lg">
+                        ₹{todayOffers[0].offer_price}
+                      </span>
+                      {todayOffers[0].original_price != null && todayOffers[0].original_price > todayOffers[0].offer_price && (
+                        <span className="text-cream-200/60 line-through text-xs sm:text-sm">
+                          ₹{todayOffers[0].original_price}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => onNavigate('menu')}
+                    className="w-full sm:w-auto bg-cream-50 hover:bg-cream-100 text-rust-600 font-heading font-bold text-xs sm:text-sm px-5 py-2.5 rounded-full shadow transition-all active:scale-95 flex-shrink-0"
+                  >
+                    Grab Offer
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Multiple Offers Carousel */
+              <div className="bg-gradient-to-r from-rust-600 via-rust-500 to-rust-600 rounded-2xl p-3.5 sm:p-5 shadow-xl border border-rust-400/30 overflow-hidden relative">
+                {(() => {
+                  const activeOffer = todayOffers[activeOfferIndex] || todayOffers[0];
+                  return (
+                    <div className="flex flex-col sm:flex-row items-center gap-3.5 sm:gap-5 text-center sm:text-left">
+                      {activeOffer.image_url ? (
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-charcoal-900 flex-shrink-0 shadow-md border border-cream-400/20">
+                          <img
+                            src={getOptimizedImageUrl(activeOffer.image_url, 300)}
+                            alt={activeOffer.title}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-cream-400 flex items-center justify-center flex-shrink-0 shadow-md">
+                          <Flame size={24} className="text-rust-600" />
+                        </div>
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-1">
+                          <span className="bg-cream-400 text-charcoal-900 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                            Special {activeOfferIndex + 1} of {todayOffers.length}
+                          </span>
+                          {activeOffer.discount_text && (
+                            <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full border border-white/30">
+                              {activeOffer.discount_text}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-heading font-bold text-cream-50 text-base sm:text-lg leading-snug">
+                          {activeOffer.title}
+                        </h3>
+                        {activeOffer.description && (
+                          <p className="text-cream-100/90 text-xs sm:text-sm mt-0.5 line-clamp-2">
+                            {activeOffer.description}
+                          </p>
+                        )}
+                        <div className="flex items-baseline justify-center sm:justify-start gap-2 mt-2">
+                          <span className="text-cream-300 font-heading font-bold text-base sm:text-lg">
+                            ₹{activeOffer.offer_price}
+                          </span>
+                          {activeOffer.original_price != null && activeOffer.original_price > activeOffer.offer_price && (
+                            <span className="text-cream-200/60 line-through text-xs sm:text-sm">
+                              ₹{activeOffer.original_price}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex sm:flex-col items-center gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={() => onNavigate('menu')}
+                          className="flex-1 sm:flex-none w-full sm:w-auto bg-cream-50 hover:bg-cream-100 text-rust-600 font-heading font-bold text-xs sm:text-sm px-5 py-2.5 rounded-full shadow transition-all active:scale-95 flex-shrink-0"
+                        >
+                          Grab Offer
+                        </button>
+
+                        {/* Navigation controls */}
+                        <div className="flex items-center gap-1.5 justify-center">
+                          <button
+                            onClick={() =>
+                              setActiveOfferIndex((prev) => (prev - 1 + todayOffers.length) % todayOffers.length)
+                            }
+                            aria-label="Previous offer"
+                            className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors"
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          <div className="flex gap-1">
+                            {todayOffers.map((_, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setActiveOfferIndex(idx)}
+                                aria-label={`Go to offer ${idx + 1}`}
+                                className={`w-2 h-2 rounded-full transition-all ${
+                                  idx === activeOfferIndex ? 'bg-cream-300 w-4' : 'bg-white/40 hover:bg-white/70'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <button
+                            onClick={() =>
+                              setActiveOfferIndex((prev) => (prev + 1) % todayOffers.length)
+                            }
+                            aria-label="Next offer"
+                            className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors"
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Category Shortcuts */}

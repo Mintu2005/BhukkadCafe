@@ -1,8 +1,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Order, OrderStatus, MenuItem, Category, OrderItem } from '@/lib/types';
+import type { Order, OrderStatus, MenuItem, Category, OrderItem, Offer } from '@/lib/types';
 import type { Session, AuthChangeEvent, User } from '@supabase/supabase-js';
 import { ORDER_STATUS_LABELS } from '@/lib/types';
+import {
+  fetchAllOffers,
+  fetchTodayOffersSetting,
+  updateTodayOffersSetting,
+  createOffer,
+  updateOffer,
+  deleteOffer,
+  uploadOfferImage,
+} from '@/lib/offers-service';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -27,11 +36,14 @@ import {
   BarChart as BarChartIcon,
   Upload,
   RefreshCw,
+  Flame,
+  Tag,
+  Percent,
 } from 'lucide-react';
 import { orderAlertPlayer, showBrowserOrderNotification } from '@/lib/order-alert-sound';
 import NewOrderAlertModal from '@/components/NewOrderAlertModal';
 
-type AdminTab = 'overview' | 'orders' | 'menu' | 'categories' | 'analytics';
+type AdminTab = 'overview' | 'orders' | 'menu' | 'categories' | 'offers' | 'analytics';
 type AdminView = 'login' | 'dashboard' | 'unauthorized';
 
 const STATUS_FLOW: OrderStatus[] = ['pending', 'accepted', 'preparing', 'ready', 'completed'];
@@ -576,6 +588,7 @@ export default function AdminDashboard() {
             { id: 'orders' as AdminTab, label: 'Orders', icon: ShoppingBag },
             { id: 'menu' as AdminTab, label: 'Menu', icon: UtensilsCrossed },
             { id: 'categories' as AdminTab, label: 'Categories', icon: Package },
+            { id: 'offers' as AdminTab, label: 'Offers & Specials', icon: Flame },
             { id: 'analytics' as AdminTab, label: 'Analytics', icon: BarChartIcon },
           ].map((t) => {
             const Icon = t.icon;
@@ -628,6 +641,7 @@ export default function AdminDashboard() {
         )}
         {tab === 'menu' && <MenuTab addToast={addToast} />}
         {tab === 'categories' && <CategoryTab addToast={addToast} />}
+        {tab === 'offers' && <OffersTab addToast={addToast} />}
         {tab === 'analytics' && <AnalyticsTab />}
       </div>
 
@@ -2128,6 +2142,677 @@ function MenuItemForm({
                 </>
               ) : (
                 'Save'
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// =============== OFFERS & TODAY SPECIAL MANAGEMENT ===============
+function OffersTab({ addToast }: { addToast: (m: string) => void }) {
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showTodayOffers, setShowTodayOffers] = useState(true);
+  const [settingUpdating, setSettingUpdating] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<Offer | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const [offersRes, settingRes] = await Promise.all([
+      fetchAllOffers(),
+      fetchTodayOffersSetting(true),
+    ]);
+
+    setOffers(offersRes.data);
+    setShowTodayOffers(settingRes);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleToggleMasterSwitch = async () => {
+    setSettingUpdating(true);
+    const newVal = !showTodayOffers;
+    const res = await updateTodayOffersSetting(newVal);
+    setSettingUpdating(false);
+
+    if (res.success) {
+      setShowTodayOffers(newVal);
+      addToast(
+        newVal
+          ? "Today's Offers ENABLED. Active offers now show on customer Home Page."
+          : "Switched to 'No Offers Today'. Home Page now displays the clean No Offers state."
+      );
+    } else {
+      addToast(res.error || 'Failed to update setting');
+    }
+  };
+
+  const handleToggleActive = async (offer: Offer) => {
+    const newVal = !offer.is_active;
+    setOffers((prev) =>
+      prev.map((o) => (o.id === offer.id ? { ...o, is_active: newVal } : o))
+    );
+    const res = await updateOffer(offer.id, { is_active: newVal });
+    if (res.error) {
+      // Revert on error
+      setOffers((prev) =>
+        prev.map((o) => (o.id === offer.id ? { ...o, is_active: offer.is_active } : o))
+      );
+      addToast(`Failed to update status for ${offer.title}`);
+    } else {
+      addToast(`"${offer.title}" is now ${newVal ? 'Active' : 'Inactive'}`);
+    }
+  };
+
+  const handleToggleToday = async (offer: Offer) => {
+    const newVal = !offer.is_today_special;
+    setOffers((prev) =>
+      prev.map((o) => (o.id === offer.id ? { ...o, is_today_special: newVal } : o))
+    );
+    const res = await updateOffer(offer.id, { is_today_special: newVal });
+    if (res.error) {
+      // Revert on error
+      setOffers((prev) =>
+        prev.map((o) => (o.id === offer.id ? { ...o, is_today_special: offer.is_today_special } : o))
+      );
+      addToast(`Failed to update Today's Special flag for ${offer.title}`);
+    } else {
+      addToast(`"${offer.title}" ${newVal ? 'marked as' : 'removed from'} Today's Special`);
+    }
+  };
+
+  const handleDelete = async (offer: Offer) => {
+    if (!confirm(`Delete offer "${offer.title}"? This cannot be undone.`)) return;
+
+    setOffers((prev) => prev.filter((o) => o.id !== offer.id));
+    const res = await deleteOffer(offer.id);
+    if (res.error) {
+      addToast(`Failed to delete "${offer.title}"`);
+      loadData();
+    } else {
+      addToast(`Offer "${offer.title}" deleted`);
+    }
+  };
+
+  const filteredOffers = offers.filter((o) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      o.title.toLowerCase().includes(q) ||
+      (o.description && o.description.toLowerCase().includes(q)) ||
+      (o.discount_text && o.discount_text.toLowerCase().includes(q))
+    );
+  });
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      {/* 1. Master "No Offers Today" / "Show Today's Offers" Card */}
+      <div className="bg-charcoal-800 rounded-2xl p-4 sm:p-5 border border-charcoal-700/50 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Flame size={20} className={showTodayOffers ? 'text-cream-400' : 'text-charcoal-500'} />
+              <h2 className="font-heading font-bold text-base sm:text-lg text-cream-50">
+                Today's Special Visibility
+              </h2>
+            </div>
+            <p className="text-charcoal-300 text-xs sm:text-sm max-w-xl">
+              {showTodayOffers
+                ? "Active Today's Special offers are currently visible to customers on the Home Page."
+                : "Master switch is set to 'No Offers Today'. Customers see the clean No Offers state on the Home Page without deleting your offers."}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <span
+              className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                showTodayOffers
+                  ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                  : 'bg-gold-500/10 text-gold-400 border-gold-500/30'
+              }`}
+            >
+              {showTodayOffers ? 'Showing Offers' : 'No Offers Today'}
+            </span>
+            <button
+              onClick={handleToggleMasterSwitch}
+              disabled={settingUpdating}
+              className={`px-4 py-2 rounded-full font-heading font-bold text-xs sm:text-sm transition-all duration-200 active:scale-95 disabled:opacity-60 flex items-center gap-1.5 shadow ${
+                showTodayOffers
+                  ? 'bg-charcoal-700 hover:bg-charcoal-600 text-cream-200 border border-charcoal-600'
+                  : 'bg-cream-400 hover:bg-cream-300 text-charcoal-900'
+              }`}
+            >
+              {settingUpdating ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : showTodayOffers ? (
+                'Set "No Offers Today"'
+              ) : (
+                "Enable Today's Offers"
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Controls & Search */}
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-charcoal-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search offers by title or discount..."
+            className="w-full bg-charcoal-800 text-cream-50 placeholder-charcoal-500 text-xs sm:text-sm rounded-full pl-9 pr-4 py-2 sm:py-2.5 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+          />
+        </div>
+
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-1.5 bg-cream-400 hover:bg-cream-300 text-charcoal-900 text-xs sm:text-sm font-heading font-bold px-4 py-2 sm:py-2.5 rounded-full transition-all duration-200 active:scale-95 flex-shrink-0 shadow"
+        >
+          <Plus size={16} strokeWidth={3} />
+          <span>Add New Offer</span>
+        </button>
+      </div>
+
+      {/* 3. Offers List */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 size={28} className="animate-spin text-charcoal-500" />
+        </div>
+      ) : filteredOffers.length === 0 ? (
+        <div className="bg-charcoal-800 rounded-2xl p-10 border border-charcoal-700/30 text-center">
+          <div className="w-14 h-14 rounded-full bg-charcoal-700 flex items-center justify-center mx-auto mb-3 text-cream-400">
+            <Flame size={26} />
+          </div>
+          <h3 className="font-heading font-semibold text-cream-50 text-base mb-1">
+            {search ? 'No matching offers' : 'No offers created yet'}
+          </h3>
+          <p className="text-charcoal-400 text-xs sm:text-sm max-w-sm mx-auto mb-4">
+            {search
+              ? 'Try changing your search keywords.'
+              : 'Create special deals, discounts, or combo offers to display on the Home Page.'}
+          </p>
+          {!search && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center gap-1.5 bg-cream-400 hover:bg-cream-300 text-charcoal-900 text-xs sm:text-sm font-bold px-4 py-2 rounded-full transition-colors"
+            >
+              <Plus size={15} strokeWidth={3} />
+              Create First Offer
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:gap-4">
+          {filteredOffers.map((offer) => (
+            <div
+              key={offer.id}
+              className="bg-charcoal-800 rounded-2xl p-4 border border-charcoal-700/40 hover:border-charcoal-600/60 transition-all flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+            >
+              {/* Image / Icon */}
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-charcoal-700 flex-shrink-0 flex items-center justify-center">
+                {offer.image_url ? (
+                  <img src={offer.image_url} alt={offer.title} className="w-full h-full object-cover" />
+                ) : (
+                  <Flame size={24} className="text-cream-400" />
+                )}
+              </div>
+
+              {/* Offer Details */}
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                  <h3 className="font-heading font-bold text-cream-50 text-sm sm:text-base leading-snug">
+                    {offer.title}
+                  </h3>
+                  {offer.discount_text && (
+                    <span className="bg-rust-500/20 border border-rust-500/40 text-rust-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      {offer.discount_text}
+                    </span>
+                  )}
+                </div>
+
+                {offer.description && (
+                  <p className="text-charcoal-300 text-xs line-clamp-2 mb-2">
+                    {offer.description}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-cream-400 font-heading font-bold text-sm sm:text-base">
+                    ₹{offer.offer_price}
+                  </span>
+                  {offer.original_price != null && offer.original_price > offer.offer_price && (
+                    <span className="text-charcoal-500 line-through text-xs">
+                      ₹{offer.original_price}
+                    </span>
+                  )}
+
+                  <span className="text-charcoal-600">•</span>
+
+                  {/* Active Toggle Button */}
+                  <button
+                    onClick={() => handleToggleActive(offer)}
+                    className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border transition-colors ${
+                      offer.is_active
+                        ? 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
+                        : 'bg-charcoal-700/60 text-charcoal-400 border-charcoal-600 hover:text-cream-200'
+                    }`}
+                  >
+                    {offer.is_active ? '● Active' : '○ Inactive'}
+                  </button>
+
+                  {/* Today's Special Toggle Button */}
+                  <button
+                    onClick={() => handleToggleToday(offer)}
+                    className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border transition-colors ${
+                      offer.is_today_special
+                        ? 'bg-gold-500/10 text-gold-400 border-gold-500/30 hover:bg-gold-500/20'
+                        : 'bg-charcoal-700/60 text-charcoal-400 border-charcoal-600 hover:text-cream-200'
+                    }`}
+                  >
+                    {offer.is_today_special ? '★ Today Special' : 'Standard Offer'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1.5 self-end sm:self-center flex-shrink-0">
+                <button
+                  onClick={() => setEditingOffer(offer)}
+                  className="w-9 h-9 rounded-xl bg-charcoal-700 text-charcoal-300 hover:text-cream-200 hover:bg-charcoal-600 flex items-center justify-center transition-colors"
+                  title="Edit Offer"
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button
+                  onClick={() => handleDelete(offer)}
+                  className="w-9 h-9 rounded-xl bg-charcoal-700 text-charcoal-300 hover:text-rust-400 hover:bg-rust-500/10 flex items-center justify-center transition-colors"
+                  title="Delete Offer"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 4. Add / Edit Modal */}
+      {(showAddModal || editingOffer) && (
+        <OfferForm
+          offer={editingOffer}
+          onClose={() => {
+            setShowAddModal(false);
+            setEditingOffer(null);
+          }}
+          onSaved={() => {
+            setShowAddModal(false);
+            setEditingOffer(null);
+            loadData();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function OfferForm({
+  offer,
+  onClose,
+  onSaved,
+}: {
+  offer: Offer | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(offer?.title ?? '');
+  const [description, setDescription] = useState(offer?.description ?? '');
+  const [originalPrice, setOriginalPrice] = useState(offer?.original_price ? String(offer.original_price) : '');
+  const [offerPrice, setOfferPrice] = useState(offer ? String(offer.offer_price) : '');
+  const [discountText, setDiscountText] = useState(offer?.discount_text ?? '');
+  const [displayOrder, setDisplayOrder] = useState(offer ? String(offer.display_order ?? 0) : '0');
+  const [isActive, setIsActive] = useState(offer?.is_active ?? true);
+  const [isTodaySpecial, setIsTodaySpecial] = useState(offer?.is_today_special ?? true);
+
+  // Image handling
+  const [previewUrl, setPreviewUrl] = useState<string | null>(offer?.image_url || null);
+  const [customImageUrl, setCustomImageUrl] = useState<string>(offer?.image_url || '');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [saving, setSaving] = useState(false);
+  const [savingStatus, setSavingStatus] = useState('Saving...');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageError(null);
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.type)) {
+      setImageError('Only JPEG, PNG, WebP, and GIF images are supported.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError('Image size must be less than 5MB.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    const objUrl = URL.createObjectURL(file);
+    setPreviewUrl(objUrl);
+    setSelectedFile(file);
+    setImageRemoved(false);
+  };
+
+  const handleRemoveImage = () => {
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setCustomImageUrl('');
+    setImageRemoved(true);
+    setImageError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setSavingStatus('Saving...');
+    setError('');
+
+    if (!title.trim()) {
+      setError('Offer title is required');
+      setSaving(false);
+      return;
+    }
+
+    const parsedOfferPrice = parseFloat(offerPrice);
+    if (Number.isNaN(parsedOfferPrice) || !isFinite(parsedOfferPrice) || parsedOfferPrice < 0) {
+      setError('Offer price must be a valid non-negative number');
+      setSaving(false);
+      return;
+    }
+
+    const parsedOrigPrice = originalPrice.trim() ? parseFloat(originalPrice) : null;
+    if (parsedOrigPrice !== null && (Number.isNaN(parsedOrigPrice) || !isFinite(parsedOrigPrice) || parsedOrigPrice < 0)) {
+      setError('Original price must be a valid non-negative number if provided');
+      setSaving(false);
+      return;
+    }
+
+    try {
+      let finalImageUrl: string | null = offer?.image_url ?? null;
+
+      if (selectedFile) {
+        setSavingStatus('Uploading image...');
+        finalImageUrl = await uploadOfferImage(selectedFile);
+      } else if (customImageUrl.trim()) {
+        finalImageUrl = customImageUrl.trim();
+      } else if (imageRemoved) {
+        finalImageUrl = null;
+      }
+
+      setSavingStatus('Saving offer...');
+      const payload = {
+        title: title.trim(),
+        description: description.trim() || null,
+        original_price: parsedOrigPrice,
+        offer_price: parsedOfferPrice,
+        discount_text: discountText.trim() || null,
+        image_url: finalImageUrl,
+        is_active: isActive,
+        is_today_special: isTodaySpecial,
+        display_order: parseInt(displayOrder) || 0,
+      };
+
+      if (offer) {
+        const res = await updateOffer(offer.id, payload);
+        if (res.error) throw new Error(res.error);
+      } else {
+        const res = await createOffer(payload);
+        if (res.error) throw new Error(res.error);
+      }
+
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save offer');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-charcoal-950/80 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div className="relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto bg-charcoal-800 rounded-t-3xl sm:rounded-3xl animate-slide-up scrollbar-hide">
+        <div className="sticky top-0 bg-charcoal-800 p-4 border-b border-charcoal-700/30 flex items-center justify-between z-10">
+          <h2 className="font-heading font-bold text-lg text-cream-50">
+            {offer ? 'Edit Offer' : 'Add New Offer'}
+          </h2>
+          <button onClick={onClose} className="text-charcoal-400 hover:text-cream-200">
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSave} className="p-4 space-y-4">
+          {/* Title */}
+          <div>
+            <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Offer Title *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Special Burger & Shake Combo"
+              required
+              className="w-full bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-sm rounded-xl px-4 py-3 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the offer or special deal details..."
+              rows={2}
+              className="w-full bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-sm rounded-xl px-4 py-2.5 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors resize-none"
+            />
+          </div>
+
+          {/* Prices & Discount Text */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Offer Price (₹) *</label>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                value={offerPrice}
+                onChange={(e) => setOfferPrice(e.target.value)}
+                placeholder="e.g. 149"
+                required
+                className="w-full bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-sm rounded-xl px-4 py-3 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Original Price (₹)</label>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                value={originalPrice}
+                onChange={(e) => setOriginalPrice(e.target.value)}
+                placeholder="e.g. 199"
+                className="w-full bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-sm rounded-xl px-4 py-3 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Discount Tag</label>
+              <input
+                type="text"
+                value={discountText}
+                onChange={(e) => setDiscountText(e.target.value)}
+                placeholder="e.g. 25% OFF"
+                className="w-full bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-sm rounded-xl px-4 py-3 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Image Upload & URL */}
+          <div>
+            <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Offer Image</label>
+            <div className="space-y-3">
+              {previewUrl ? (
+                <div className="relative w-full h-36 bg-charcoal-900 rounded-xl overflow-hidden border border-charcoal-700 flex items-center justify-center group">
+                  <img src={previewUrl} alt="Offer preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    className="absolute top-2 right-2 bg-charcoal-900/80 hover:bg-rust-600 text-cream-100 p-1.5 rounded-full transition-colors"
+                    title="Remove Image"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-28 bg-charcoal-900/50 border-2 border-dashed border-charcoal-700 hover:border-cream-400/50 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-colors p-3 text-center"
+                >
+                  <Upload size={22} className="text-charcoal-400 mb-1" />
+                  <span className="text-cream-200 text-xs font-medium">Click to select photo</span>
+                  <span className="text-charcoal-500 text-[10px]">JPG, PNG, WebP up to 5MB</span>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+
+              {!previewUrl && (
+                <div>
+                  <input
+                    type="url"
+                    value={customImageUrl}
+                    onChange={(e) => {
+                      setCustomImageUrl(e.target.value);
+                      if (e.target.value.trim()) {
+                        setPreviewUrl(e.target.value.trim());
+                        setImageRemoved(false);
+                      }
+                    }}
+                    placeholder="Or paste an image URL..."
+                    className="w-full bg-charcoal-900 text-cream-50 placeholder-charcoal-500 text-xs rounded-xl px-3 py-2 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+                  />
+                </div>
+              )}
+
+              {imageError && (
+                <p className="text-rust-400 text-xs">{imageError}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Display Order & Toggles */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center pt-2">
+            <div>
+              <label className="block text-charcoal-200 text-sm font-medium mb-1.5">Display Order</label>
+              <input
+                type="number"
+                step="1"
+                value={displayOrder}
+                onChange={(e) => setDisplayOrder(e.target.value)}
+                className="w-full bg-charcoal-900 text-cream-50 text-sm rounded-xl px-3 py-2.5 border border-charcoal-700/50 focus:border-cream-400/50 focus:outline-none transition-colors"
+              />
+            </div>
+
+            <div className="sm:col-span-2 flex flex-wrap items-center gap-4 pt-4 sm:pt-6">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="w-4 h-4 rounded bg-charcoal-900 border-charcoal-700 text-cream-400 focus:ring-0"
+                />
+                <span className="text-cream-200 text-sm">Active Offer</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isTodaySpecial}
+                  onChange={(e) => setIsTodaySpecial(e.target.checked)}
+                  className="w-4 h-4 rounded bg-charcoal-900 border-charcoal-700 text-cream-400 focus:ring-0"
+                />
+                <span className="text-cream-200 text-sm">Show in Today's Special</span>
+              </label>
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-rust-500/10 border border-rust-500/30 rounded-xl p-3 text-rust-300 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-charcoal-700 hover:bg-charcoal-600 text-cream-50 font-medium text-sm py-3 rounded-xl transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-cream-400 hover:bg-cream-300 text-charcoal-900 font-heading font-bold text-sm py-3 rounded-xl transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  {savingStatus}
+                </>
+              ) : (
+                'Save Offer'
               )}
             </button>
           </div>
