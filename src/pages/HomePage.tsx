@@ -199,7 +199,7 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="bg-charcoal-800 rounded-2xl overflow-hidden">
-                <div className="aspect-square img-shimmer" />
+                <div className="aspect-[4/3] img-shimmer" />
                 <div className="p-4 space-y-2">
                   <div className="h-4 bg-charcoal-700 rounded img-shimmer" />
                   <div className="h-3 bg-charcoal-700 rounded w-2/3 img-shimmer" />
@@ -208,7 +208,15 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
             ))
           ) : popularItems && popularItems.length > 0 ? (
             popularItems.slice(0, 4).map((item) => (
-              <FoodCard key={item.id} item={item} onClick={() => onItemSelect(item)} />
+              <div
+                key={item.id}
+                className="[&_.aspect-square]:!aspect-[4/3] [&_img]:!object-cover [&_img]:!object-center"
+              >
+                <FoodCard
+                  item={item}
+                  onClick={() => onItemSelect(item)}
+                />
+              </div>
             ))
           ) : (
             <div className="col-span-2 sm:col-span-2 lg:col-span-4 bg-charcoal-800 rounded-2xl p-6 border border-charcoal-700/30 text-center">
