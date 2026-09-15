@@ -1,14 +1,169 @@
 import { useEffect, useState } from 'react';
 import { fetchCategories, fetchPopularItems, fetchCategoryImages } from '@/lib/menu-service';
-import { getOptimizedImageUrl } from '@/lib/image-utils';
+import { getOptimizedImageUrl, DEFAULT_FOOD_IMAGE } from '@/lib/image-utils';
 import type { MenuItem, Category } from '@/lib/types';
-import FoodCard from '@/components/FoodCard';
+import QuantitySelector from '@/components/QuantitySelector';
+import { useCart } from '@/lib/cart-context';
 import type { PageId } from '@/components/BottomNav';
-import { ArrowRight, MapPin, Phone, Clock, Star, Flame, Truck, Utensils, Sparkles } from 'lucide-react';
+import { ArrowRight, MapPin, Phone, Clock, Star, Flame, Truck, Utensils, Sparkles, Plus } from 'lucide-react';
 
 interface HomePageProps {
   onNavigate: (page: PageId, params?: Record<string, unknown>) => void;
   onItemSelect: (item: MenuItem) => void;
+}
+
+interface ImageFramingStyle {
+  scale: number;
+  objectPosition: string;
+}
+
+/**
+ * Calibrated visual framing for each popular menu item based on its actual source image.
+ * Normalizes visual presence across all cards on mobile devices.
+ */
+function getPopularItemImageStyle(item: MenuItem): ImageFramingStyle {
+  const id = item.id || '';
+  const name = (item.name || '').toLowerCase().trim();
+  const url = (item.image_url || '').toLowerCase();
+
+  // Fried Rice (Unsplash photo-1603133872878): Small rice mound in distance on huge white plate -> scale 1.58
+  if (name.includes('fried rice') || id === 'bb81bda7-c169-4f2c-bca5-78041e89c524' || url.includes('photo-1603133872878')) {
+    return { scale: 1.58, objectPosition: '50% 50%' };
+  }
+  // Plain Maggi (item_1789229464844): Bowl in lower half with empty table above -> focal center 70% & scale 1.34
+  if (name.includes('maggi') || id === '97fad591-836d-40bc-a347-e1c1eeb71881' || url.includes('item_1789229464844')) {
+    return { scale: 1.34, objectPosition: '50% 70%' };
+  }
+  // Pav Bhaji (item_1789465390964): Tall vertical platter -> align focal point to keep pav buns & bhaji bowl framed
+  if (name.includes('pav bhaji') || id === '574a814a-934b-495d-af13-039260b5cf10' || url.includes('item_1789465390964')) {
+    return { scale: 1.18, objectPosition: '46% 36%' };
+  }
+  // Paneer Sandwich (item_1789465604929): Already wide close-up filling 80% width -> standard 1.02 scale
+  if (name.includes('sandwich') || id === 'fa307540-014e-4d96-b2d5-99550fd505f4' || url.includes('item_1789465604929')) {
+    return { scale: 1.02, objectPosition: '50% 50%' };
+  }
+  // Cheese Macroni (item_1789465944474): Close-up bowl shot -> standard 1.02 scale
+  if (name.includes('macroni') || name.includes('macaroni') || id === '0e57252c-3cd1-438a-8708-418a3daeab9d' || url.includes('item_1789465944474')) {
+    return { scale: 1.02, objectPosition: '50% 50%' };
+  }
+  // Creamy Chaap (item_1789465275112): Close-up bowl shot -> standard 1.02 scale
+  if (name.includes('chaap') || id === '9652a76b-0240-4ba8-b2ab-2d4fc9231b3e' || url.includes('item_1789465275112')) {
+    return { scale: 1.02, objectPosition: '50% 48%' };
+  }
+  // Aaloo Tikki Burger (item_1789465817900): Full-height macro shot -> slight scale-back so full burger fits
+  if (name.includes('burger') || id === '58911bca-844f-42ee-af7d-0d2a679c3737' || url.includes('item_1789465817900')) {
+    return { scale: 0.98, objectPosition: '50% 50%' };
+  }
+  // Farm House Pizza (item_1789465685247): Pizza on board with cheese pull -> focal center 58%
+  if (name.includes('pizza') || id === 'fc8c7b12-258b-40f0-ae28-4ccf0d0311f1' || url.includes('item_1789465685247')) {
+    return { scale: 1.05, objectPosition: '50% 58%' };
+  }
+  return { scale: 1.06, objectPosition: '50% 50%' };
+}
+
+interface HomeFoodCardProps {
+  item: MenuItem;
+  onClick: () => void;
+}
+
+function HomeFoodCard({ item, onClick }: HomeFoodCardProps) {
+  const { addToCart, getQuantity, updateQuantity } = useCart();
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const quantity = getQuantity(item.id);
+
+  const handleAdd = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    addToCart(item, 1);
+  };
+
+  const optimizedSrc = getOptimizedImageUrl(item.image_url, 400);
+  const imgStyle = getPopularItemImageStyle(item);
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="group bg-charcoal-800 rounded-2xl overflow-hidden cursor-pointer transition-transform transition-shadow duration-200 hover:shadow-2xl hover:shadow-black/40 hover:-translate-y-1 border border-charcoal-700/50 touch-pan-y flex flex-col h-full"
+    >
+      <div className={`relative w-full aspect-[4/3] overflow-hidden flex-shrink-0 ${!imageLoaded ? 'img-shimmer' : 'bg-charcoal-900'}`}>
+        <img
+          src={optimizedSrc}
+          alt={item.name}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          onLoad={() => setImageLoaded(true)}
+          onError={(e) => {
+            const target = e.currentTarget as HTMLImageElement;
+            target.onerror = null;
+            target.src = DEFAULT_FOOD_IMAGE;
+            setImageLoaded(true);
+          }}
+          className={`w-full h-full object-cover pointer-events-none select-none ${
+            imageLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{
+            objectPosition: imgStyle.objectPosition,
+            transform: `scale(${isHovered ? imgStyle.scale * 1.05 : imgStyle.scale})`,
+            transformOrigin: 'center center',
+            transition: 'transform 0.3s ease-out, opacity 0.2s ease-out',
+          }}
+        />
+        {item.is_popular && (
+          <div className="absolute top-2 left-2 flex items-center gap-1 bg-rust-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg pointer-events-none select-none">
+            <Star size={10} className="fill-current" />
+            POPULAR
+          </div>
+        )}
+        {!item.is_available && (
+          <div className="absolute inset-0 bg-charcoal-900/70 flex items-center justify-center pointer-events-none select-none">
+            <span className="text-cream-300 font-heading font-semibold text-sm">Unavailable</span>
+          </div>
+        )}
+      </div>
+
+      <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between">
+        <div>
+          <h3 className="font-heading font-semibold text-cream-50 text-xs sm:text-sm sm:text-base leading-tight line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem]">
+            {item.name}
+          </h3>
+          {item.description && (
+            <p className="text-charcoal-300 text-[11px] sm:text-xs mt-1 line-clamp-2 min-h-[1.75rem] sm:min-h-[2rem]">
+              {item.description}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between mt-2.5 sm:mt-3 gap-1.5 sm:gap-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-cream-400 font-heading font-bold text-sm sm:text-base sm:text-lg">
+              &#8377;{item.price}
+            </span>
+          </div>
+
+          {quantity > 0 ? (
+            <QuantitySelector
+              quantity={quantity}
+              onIncrement={() => updateQuantity(item.id, quantity + 1)}
+              onDecrement={() => updateQuantity(item.id, quantity - 1)}
+              size="sm"
+            />
+          ) : (
+            <button
+              onClick={handleAdd}
+              disabled={!item.is_available}
+              className="flex items-center gap-1 bg-cream-400 hover:bg-cream-300 text-charcoal-900 text-xs font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-full transition-all duration-200 active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus size={14} strokeWidth={3} />
+              Add
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
@@ -149,7 +304,7 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
         <div className="flex gap-2.5 sm:gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 touch-pan-x">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex-shrink-0 w-20 h-28 bg-charcoal-800 rounded-2xl img-shimmer" />
+                <div key={i} className="flex-shrink-0 w-24 aspect-[4/3] sm:w-36 sm:aspect-[4/3] bg-charcoal-800 rounded-2xl img-shimmer" />
               ))
             : categories.map((cat) => (
                 <button
@@ -157,7 +312,7 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
                   onClick={() => onNavigate('menu', { category: cat.slug })}
                   className="flex-shrink-0 w-24 sm:w-36 flex flex-col items-center gap-1.5 sm:gap-2 group"
                 >
-                  <div className="w-24 h-18 sm:w-32 sm:h-24 rounded-2xl bg-charcoal-800 border border-charcoal-700/50 overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-300 shadow-lg">
+                  <div className="w-24 aspect-[4/3] sm:w-36 sm:aspect-[4/3] rounded-2xl bg-charcoal-800 border border-charcoal-700/50 overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-300 shadow-lg flex-shrink-0">
                     {categoryImages[cat.id] ? (
                       <img
                         src={getOptimizedImageUrl(categoryImages[cat.id], 300)}
@@ -165,7 +320,7 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
                         loading="lazy"
                         decoding="async"
                         draggable={false}
-                        className="w-full h-full object-cover pointer-events-none select-none"
+                        className="w-full h-full object-cover object-center pointer-events-none select-none"
                       />
                     ) : (
                       <div className="text-2xl sm:text-3xl">{cat.icon}</div>
@@ -198,9 +353,9 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-charcoal-800 rounded-2xl overflow-hidden">
-                <div className="aspect-[4/3] img-shimmer" />
-                <div className="p-4 space-y-2">
+              <div key={i} className="bg-charcoal-800 rounded-2xl overflow-hidden flex flex-col">
+                <div className="w-full aspect-[4/3] img-shimmer flex-shrink-0" />
+                <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
                   <div className="h-4 bg-charcoal-700 rounded img-shimmer" />
                   <div className="h-3 bg-charcoal-700 rounded w-2/3 img-shimmer" />
                 </div>
@@ -208,15 +363,11 @@ export default function HomePage({ onNavigate, onItemSelect }: HomePageProps) {
             ))
           ) : popularItems && popularItems.length > 0 ? (
             popularItems.slice(0, 4).map((item) => (
-              <div
+              <HomeFoodCard
                 key={item.id}
-                className="[&_.aspect-square]:!aspect-[4/3] [&_img]:!object-cover [&_img]:!object-center"
-              >
-                <FoodCard
-                  item={item}
-                  onClick={() => onItemSelect(item)}
-                />
-              </div>
+                item={item}
+                onClick={() => onItemSelect(item)}
+              />
             ))
           ) : (
             <div className="col-span-2 sm:col-span-2 lg:col-span-4 bg-charcoal-800 rounded-2xl p-6 border border-charcoal-700/30 text-center">
